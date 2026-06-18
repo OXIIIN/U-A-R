@@ -130,6 +130,16 @@
           <div class="ai-section-title">SQL结果</div>
           <pre class="ai-sql">{{ aiResult.sql }}</pre>
         </div>
+        <!-- SQL 查询结果 -->
+        <div class="ai-section" v-if="aiSqlRows && aiSqlRows.length">
+          <div class="ai-section-title">查询结果（{{ aiSqlRows.length }} 条）</div>
+          <el-table :data="aiSqlRows" border size="mini" style="width:100%"
+            :header-cell-style="{background:'#1a2745',color:'#e2e2e2',fontWeight:'bold'}">
+            <el-table-column v-for="col in Object.keys(aiSqlRows[0])" :key="col"
+              :prop="col" :label="col" align="center">
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
     </div>
     <!-- 打印设置弹窗 -->
@@ -178,7 +188,6 @@
 </template>
 
 <script>
-import { USERS } from '../data/initialData'
 import { toCSV, downloadFile} from '../utils/exportUtils'
 import { getChartOption } from '../utils/chartUtils'
 import { MARGIN_MAP, DIM_OPTIONS, MET_OPTIONS, DIM_LABELS, MET_LABELS, groupBy, calcMetric, fillData } from '../utils/reportUtils'
@@ -189,7 +198,7 @@ export default {
   data: function () {
     return {
       // AI 分析
-      aiQuestion: '',aiLoading: false,aiResult: null,aiChart: null,
+      aiQuestion: '',aiLoading: false,aiResult: null,aiChart: null, aiSqlRows: null, 
       // 数据源
       users: [], dimOptions: DIM_OPTIONS, metOptions: MET_OPTIONS,
       // 控制栏状态
@@ -253,8 +262,8 @@ export default {
   created: function () {// 初始化编辑缓冲区
    this._editBuf = '' 
   },
-  mounted: function () {// 从 localStorage 读取用户数据
-   this.loadFromLocal() 
+  mounted: function () {
+    this.loadUsers()
   },
   beforeDestroy: function () {// 销毁实例，释放内存
     if (this.aiChart) {
@@ -263,9 +272,11 @@ export default {
   },
 
   methods: {
-    loadFromLocal: function () {// 数据持久化
-      var data = localStorage.getItem('userList')
-      this.users = data ? JSON.parse(data) : USERS.slice()
+    loadUsers: function () {
+      var self = this
+      fetch('http://localhost:3001/api/users')
+        .then(function (res) { return res.json() })
+        .then(function (json) { if (json.success) { self.users = json.data } })
     },
     // ----AI分析----
     aiChartData: function (dimension, metric, filter) {// 获取图表数据（参数来自后端）
@@ -284,38 +295,66 @@ export default {
       var values = cats.map(function (k) { return calcMetric(groups[k], metric) })
       return { categories: cats, values: values }
     },   
-    askAI: function () {// 发起AI请求
+    askAI: function () {
       if (!this.aiQuestion.trim()) return
       var self = this
       self.aiLoading = true
       self.aiResult = null
-      // 发送请求到后端
+      self.aiSqlRows = null
       fetch('http://localhost:3001/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: self.aiQuestion })
       })
-      // 解析相应，处理结果
       .then(function (res) { return res.json() })
       .then(function (json) {
-        self.aiLoading = false// 关闭加载动画
-        if (!json.success) { self.$message.error(json.error); return }// 提示错误信息
+        self.aiLoading = false
+        if (!json.success) { self.$message.error(json.error); return }
         self.aiResult = json.data
-        if (json.data && json.data.dimension && json.data.metric) {
-          var chartData = self.aiChartData(json.data.dimension, json.data.metric, json.data.filter)
-          var chart = {
-            type: json.data.chart_type || 'bar',
-            title: json.data.title || '统计结果',
-            categories: chartData.categories,
-            series: [{ name: MET_LABELS[json.data.metric] || json.data.metric, data: chartData.values }]
-          }
-          self.$nextTick(function () { self.renderAIChart(chart) })
+        // 如果有 SQL，真正执行它
+        if (json.data && json.data.sql) {
+          fetch('http://localhost:3001/api/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sql: json.data.sql })
+          })
+          .then(function (res) { return res.json() })
+          .then(function (qRes) {
+            if (!qRes.success) {
+              self.$message.error('SQL执行失败：' + qRes.error)
+              return
+            }
+            // 用真实查询结果渲染图表
+            self.aiSqlRows = qRes.data
+            if (json.data.dimension && json.data.metric) {
+              var chartData = self.buildChartFromSQL(qRes.data)
+              var chart = {
+                type: json.data.chart_type || 'bar',
+                title: json.data.title || '统计结果',
+                categories: chartData.categories,
+                series: [{ name: MET_LABELS[json.data.metric] || json.data.metric, data: chartData.values }]
+              }
+              self.$nextTick(function () { self.renderAIChart(chart) })
+            }
+          })
         }
       })
-      .catch(function (e) {// 请求失败处理
+      .catch(function (e) {
         self.aiLoading = false
         self.$message.error('请求失败：' + e.message)
       })
+    },
+    buildChartFromSQL: function (rows) {
+      // rows 是 SQL 返回的数组，每项是一个对象
+      // 如 [{group:'前端组', count:3}, {group:'后端组', count:2}]
+      if (!rows || !rows.length) return { categories: [], values: [] }
+      // 取第一列作为分类，第二列作为数值
+      var keys = Object.keys(rows[0])
+      var catKey = keys[0]    // 第一列 = 分类（如 group, department, year）
+      var valKey = keys[1]    // 第二列 = 数值（如 count, avg, max）
+      var categories = rows.map(function (r) { return String(r[catKey] || '未知') })
+      var values = rows.map(function (r) { return r[valKey] != null ? r[valKey] : 0 })
+      return { categories: categories, values: values }
     },
     renderAIChart: function (chart) {// 生成图表
       var el = document.getElementById('aiChart')

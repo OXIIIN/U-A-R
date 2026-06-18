@@ -40,7 +40,7 @@ var DNS = ['heatmap', 'wordcloud', 'sankey', 'boxplot', 'nestedpie']
 var MYS = ['pie', 'rose', 'funnel']
 
 // 搜索字段  
-var SF = ['status', 'department', 'group', 'name', 'role', 'email', 'phone', 'address']
+var SF = ['status', 'department', 'group', 'name', 'role', 'year', 'email', 'phone', 'address']
 
 // 表格列配置  
 var TABLECOLS = [

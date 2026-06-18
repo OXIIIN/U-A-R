@@ -121,7 +121,6 @@
 </template>
 
 <script>
-import { USERS} from '../data/initialData'
 import { FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, SF, TABLECOLS } from '../utils/userListUtils'
 import { getChartOption, CG } from '../utils/chartUtils'
 import { exportCSV } from '../utils/exportUtils'
@@ -185,7 +184,6 @@ export default {
   watch: {
     users: {
       handler: function () {
-        localStorage.setItem('userList', JSON.stringify(this.users))// 存入用户数据到 localStorage
         this.updateStats()
         this.renderChart()
       },
@@ -204,7 +202,7 @@ export default {
 
   mounted: function () {
     var self = this
-    self.loadFromLocal()// 从 localStorage 加载用户数据
+    self.loadUsers()
     self.$nextTick(function () { self.initChart() })
   },
   beforeDestroy: function () {                       
@@ -216,10 +214,14 @@ export default {
   },
 
   methods: {
-    loadFromLocal: function () {// 从localStorage读取数据
-      var data = localStorage.getItem('userList')
-      this.users = data ? JSON.parse(data) : USERS.slice()
+    loadUsers: function () {
+      var self = this
+      fetch('http://localhost:3001/api/users')
+        .then(function (res) { return res.json() })
+        .then(function (json) { if (json.success) { self.users = json.data } })
+        .catch(function (e) { self.$message.error('加载失败：' + e.message) })
     },
+
     // ----顶部栏----
     exportCSV: function () {// 导出CSV
       var headers = this.fields.map(function (f) { return f.label })
@@ -315,20 +317,26 @@ export default {
       var self = this
       self.$confirm('确定删除选中的' + self.selectedIds.length + '个用户？', '提示', { type: 'warning' })
         .then(function () {
-          self.users = self.users.filter(function (u) { return self.selectedIds.indexOf(u.id) === -1 })
-          self.selectedIds = []
-          self.$message.success('删除成功')
-          if (self.currentPage > self.totalPages) { self.currentPage = self.totalPages }
+          fetch('http://localhost:3001/api/users/batch-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: self.selectedIds })
+          }).then(function (res) { return res.json() })
+            .then(function (json) {
+              if (json.success) { self.selectedIds = []; self.loadUsers(); self.$message.success('删除成功') }
+            })
         }).catch(function () {})
     },
     batchSet: function (status) {// 批量设置状态
       var self = this
-      self.users.forEach(function (u) {
-        if (self.selectedIds.indexOf(u.id) !== -1) { u.status = status }
-      })
-      self.selectedIds = []
-      self.$refs.userTable.clearSelection()    // 清除表格勾选
-      self.$message.success('修改成功')
+      fetch('http://localhost:3001/api/users/batch-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: self.selectedIds, status: status })
+      }).then(function (res) { return res.json() })
+        .then(function (json) {
+          if (json.success) { self.selectedIds = []; self.loadUsers(); self.$message.success('修改成功') }
+        })
     },
     // ----弹窗----
     openPopup: function (mode, user) {// 打开弹窗
@@ -347,32 +355,32 @@ export default {
         return
       }
       if (self.popupMode === 'add') {
-        self.users.unshift({
-          id: Date.now(), status: '未激活',
-          department: self.popupData.department,
-          group: self.popupData.group,
-          name: self.popupData.name, role: self.popupData.role,
-          year: self.popupData.year || '2024',
-          score: 0,
-          email: self.popupData.email,
-          phone: self.popupData.phone || '未填写',
-          address: self.popupData.address || '未填写'
-        })
+        fetch('http://localhost:3001/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(self.popupData)
+        }).then(function (res) { return res.json() })
+          .then(function (json) {
+            if (json.success) { self.loadUsers(); self.$message.success('添加成功'); self.dialogVisible = false }
+          })
       } else {
-        var idx = self.users.findIndex(function (u) { return u.id === self.popupData.id })
-        if (idx === -1) { self.$message.error('用户已删除'); self.dialogVisible = false; return }
-        Object.assign(self.users[idx], self.popupData)
+        fetch('http://localhost:3001/api/users/' + self.popupData.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(self.popupData)
+        }).then(function (res) { return res.json() })
+          .then(function (json) {
+            if (json.success) { self.loadUsers(); self.$message.success('保存成功'); self.dialogVisible = false }
+          })
       }
-      self.dialogVisible = false
     },
-    deleteUser: function (user) {// 删除
+    deleteUser: function (user) {
       var self = this
       self.$confirm('删除「' + user.name + '」？', '提示', { type: 'warning' })
         .then(function () {
-          var i = self.users.findIndex(function (u) { return u.id === user.id })
-          self.users.splice(i, 1)
-          self.$message.success('删除成功')
-          if (self.currentPage > self.totalPages) { self.currentPage = self.totalPages }
+          fetch('http://localhost:3001/api/users/' + user.id, { method: 'DELETE' })
+            .then(function (res) { return res.json() })
+            .then(function (json) { if (json.success) { self.loadUsers(); self.$message.success('删除成功') } })
         }).catch(function () {})
     },
     getOptions: function (f) {// 获取下拉框选项
