@@ -8,15 +8,14 @@ const dbPath = './data.db'// 数据库文件路径
 // ----初始化数据库----
 function initDB(callback) {
   initSqlJs().then(SQL => {
-    // 如果已有数据库文件，读取它；否则创建新数据库
-    if (fs.existsSync(dbPath)) {
-      const buffer = fs.readFileSync(dbPath)
-      db = new SQL.Database(buffer)
-    } else {
-      db = new SQL.Database()
+    if (fs.existsSync(dbPath)) {// data.db文件已存在
+      const dbData = fs.readFileSync(dbPath)// 读取文件的二进制内容
+      db = new SQL.Database(dbData)// 采用已有数据创建数据库实例
+    } else {// data.db文件不存在
+      db = new SQL.Database()// 创建一个空的数据库实例
     }
 
-    // 建表
+    // 若不存在，则创建一个表（无数据）
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
@@ -34,7 +33,7 @@ function initDB(callback) {
     `)
 
     // 表为空时插入初始数据（20个用户）
-    const result = db.exec('SELECT COUNT(*) as c FROM users')
+    const result = db.exec('SELECT COUNT(*) as c FROM users')// 格式为[{ columns: ['c'], values: [[20]] }]
     const count = result[0].values[0][0]
     if (count === 0) {
       const stmt = db.prepare(
@@ -62,9 +61,9 @@ function initDB(callback) {
         [19, '活跃', '产品部', '设计组', '许晨', '用户', '2022', 87, 'xuchen@company.cn', '182-0019-0019', '济南市历下区泉城路180号'],
         [20, '活跃', '产品部', '设计组', '高洁', '用户', '2023', 76, 'gaojie@company.cn', '159-0020-0020', '昆明市五华区翠湖南路2号']
         ]
-      initialUsers.forEach(u => { stmt.run(u) })
+      initialUsers.forEach(u => { stmt.run(u) })// 将数组中的值替换 stmt 的 ? 占位符并执行
       stmt.free()// 释放 prepared statement
-      console.log('已插入 20 条初始数据')
+      console.log('已插入 ' + initialUsers.length + ' 条初始数据')
     }
 
     saveDB()// 保存到文件
@@ -75,25 +74,35 @@ function initDB(callback) {
 // ----保存数据库到文件----
 function saveDB() {
   const data = db.export()// 导出为 Uint8Array
-  const buffer = Buffer.from(data)// 转为 Node.js Buffer
-  fs.writeFileSync(dbPath, buffer)// 写入文件
+  const dbData = Buffer.from(data)// 转为 Node.js dbData
+  fs.writeFileSync(dbPath, dbData)// 写入文件
 }
 
 // ----查询（返回对象数组）----
 function queryAll(sql, params) {
   const stmt = db.prepare(sql)
-  if (params) stmt.bind(params)
+  if (params) 
+  stmt.bind(params.map(function (p) {// 
+    return p === undefined ? null : p 
+  }))
   const rows = []
-  while (stmt.step()) { rows.push(stmt.getAsObject()) }
+  while (stmt.step()) { rows.push(stmt.getAsObject()) }// getAsObject() — 把当前行数据转为 { id: 1, name: '张伟', department: '技术部', ... } 这样的对象。
   stmt.free()
   return rows
 }
 
 // ----执行（INSERT/UPDATE/DELETE）----
 function run(sql, params) {
-  if (params) { db.run(sql, params) } else { db.run(sql) }
+  if (params) {
+    db.run(sql, params.map(function (p) {
+      return p === undefined ? null : p 
+    })) 
+  }
+  else { db.run(sql) }
   saveDB()// 每次写操作后保存到文件，防止数据丢失
-  return { lastInsertRowid: db.exec('SELECT last_insert_rowid()')[0].values[0][0] }
+  return {
+    lastInsertRowid: db.exec('SELECT last_insert_rowid()')[0].values[0][0]
+  }
 }
 
 module.exports = { initDB, queryAll, run }

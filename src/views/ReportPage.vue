@@ -126,13 +126,10 @@
           <div class="ai-section-title">{{ aiResult.title }}</div>
           <div id="aiChart" style="width:100%;height:300px;"></div>
         </div>
-        <div class="ai-section">
-          <div class="ai-section-title">SQL结果</div>
-          <pre class="ai-sql">{{ aiResult.sql }}</pre>
-        </div>
         <!-- SQL 查询结果 -->
         <div class="ai-section" v-if="aiSqlRows && aiSqlRows.length">
           <div class="ai-section-title">查询结果（{{ aiSqlRows.length }} 条）</div>
+          <pre class="ai-sql">{{ aiResult.sql }}</pre>
           <el-table :data="aiSqlRows" border size="mini" style="width:100%"
             :header-cell-style="{background:'#1a2745',color:'#e2e2e2',fontWeight:'bold'}">
             <el-table-column v-for="col in Object.keys(aiSqlRows[0])" :key="col"
@@ -190,7 +187,7 @@
 <script>
 import { toCSV, downloadFile} from '../utils/exportUtils'
 import { getChartOption } from '../utils/chartUtils'
-import { MARGIN_MAP, DIM_OPTIONS, MET_OPTIONS, DIM_LABELS, MET_LABELS, groupBy, calcMetric, fillData } from '../utils/reportUtils'
+import { MARGIN_MAP, DIM_OPTIONS, MET_OPTIONS, DIM_LABELS, MET_LABELS, groupBy, fillData } from '../utils/reportUtils'
 import * as echarts from 'echarts'
 
 export default {
@@ -276,25 +273,13 @@ export default {
       var self = this
       fetch('http://localhost:3001/api/users')
         .then(function (res) { return res.json() })
-        .then(function (json) { if (json.success) { self.users = json.data } })
+        .then(function (json) {
+          if (json.success) {
+            self.users = json.data // 由数据库加载用户数据
+          } 
+        })
     },
     // ----AI分析----
-    aiChartData: function (dimension, metric, filter) {// 获取图表数据（参数来自后端）
-      var users = this.users
-      if (filter && filter.length) {
-        filter.forEach(function (f) {
-          if (f.field && f.value) {
-            users = users.filter(function (u) {
-              return String(u[f.field] || '') === f.value
-            })
-          }
-       })
-      }
-      var groups = groupBy(users, dimension)
-      var cats = Object.keys(groups)
-      var values = cats.map(function (k) { return calcMetric(groups[k], metric) })
-      return { categories: cats, values: values }
-    },   
     askAI: function () {
       if (!this.aiQuestion.trim()) return
       var self = this
@@ -311,7 +296,7 @@ export default {
         self.aiLoading = false
         if (!json.success) { self.$message.error(json.error); return }
         self.aiResult = json.data
-        // 如果有 SQL，真正执行它
+        // 执行sql
         if (json.data && json.data.sql) {
           fetch('http://localhost:3001/api/query', {
             method: 'POST',
@@ -326,13 +311,15 @@ export default {
             }
             // 用真实查询结果渲染图表
             self.aiSqlRows = qRes.data
-            if (json.data.dimension && json.data.metric) {
-              var chartData = self.buildChartFromSQL(qRes.data)
+            var chartData = self.dataFromSQL(qRes.data)
+            if (chartData.categories.length) {
               var chart = {
                 type: json.data.chart_type || 'bar',
                 title: json.data.title || '统计结果',
                 categories: chartData.categories,
-                series: [{ name: MET_LABELS[json.data.metric] || json.data.metric, data: chartData.values }]
+                series: [{ name: MET_LABELS[chartData.metric] || chartData.metric, data: chartData.values }],
+                dimension: chartData.dimension,
+                metric: chartData.metric
               }
               self.$nextTick(function () { self.renderAIChart(chart) })
             }
@@ -344,17 +331,16 @@ export default {
         self.$message.error('请求失败：' + e.message)
       })
     },
-    buildChartFromSQL: function (rows) {
+    dataFromSQL: function (rows) {
       // rows 是 SQL 返回的数组，每项是一个对象
       // 如 [{group:'前端组', count:3}, {group:'后端组', count:2}]
-      if (!rows || !rows.length) return { categories: [], values: [] }
-      // 取第一列作为分类，第二列作为数值
+      if (!rows || !rows.length) return { categories: [], values: [] , dimension: '', metric: '' }
       var keys = Object.keys(rows[0])
       var catKey = keys[0]    // 第一列 = 分类（如 group, department, year）
       var valKey = keys[1]    // 第二列 = 数值（如 count, avg, max）
       var categories = rows.map(function (r) { return String(r[catKey] || '未知') })
       var values = rows.map(function (r) { return r[valKey] != null ? r[valKey] : 0 })
-      return { categories: categories, values: values }
+      return { categories: categories, values: values, dimension: catKey, metric: valKey  }
     },
     renderAIChart: function (chart) {// 生成图表
       var el = document.getElementById('aiChart')
@@ -363,7 +349,7 @@ export default {
       this.aiChart = echarts.init(el)// 创建新的 ECharts 实例
       var option = getChartOption(
         chart.type, chart.categories, chart.series[0].data,
-        this.users, this.aiResult.dimension, this.aiResult.metric
+        this.users, chart.dimension, chart.metric
       )
       this.aiChart.setOption(option, true)// 渲染图表
     },

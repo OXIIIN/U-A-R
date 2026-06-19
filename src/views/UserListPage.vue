@@ -69,15 +69,14 @@
     </div>
     <!-- 搜索框 -->
     <div class="search-bar">
-      <el-input placeholder="搜索" v-model="search" @input="currentPage=1" clearable></el-input>
+      <el-input placeholder="搜索" v-model="search" @input="drillPath=[];currentPage=1;loadUsers(search)" clearable></el-input>
       <el-button type="danger" plain @click="openPopup('add')">添加用户</el-button>
     </div>
-    <!-- 批量操作 -->
+    <!-- 批量删除 -->
     <div v-if="selectedIds.length" class="batch-bar">
       <span>已选 {{ selectedIds.length }} 项</span>
-      <el-button size="mini" type="danger" plain @click="batchDelete">批量删除</el-button>
-      <el-button size="mini" type="danger" plain v-for="st in statusOptions" :key="st" @click="batchSet(st)">设为{{ st }}</el-button>
-      <el-button size="mini" @click="$refs.userTable.clearSelection()" style="margin-left:auto;">取消选择</el-button>
+      <el-button size="mini" type="danger" plain @click="batchDelete" style="margin-left:auto;">删除</el-button>
+      <el-button size="mini" @click="$refs.userTable.clearSelection()" >取消</el-button>
     </div>
     <!-- 当前页用户 -->
     <el-table :data="pageUsers" style="width:100%" @selection-change="onSelect" ref="userTable">
@@ -121,7 +120,7 @@
 </template>
 
 <script>
-import { FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, SF, TABLECOLS } from '../utils/userListUtils'
+import { FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, TABLECOLS } from '../utils/userListUtils'
 import { getChartOption, CG } from '../utils/chartUtils'
 import { exportCSV } from '../utils/exportUtils'
 import * as echarts from 'echarts'
@@ -152,12 +151,6 @@ export default {
       if (dp.length) {
         dp.forEach(function (step) {// 通过钻取目录逐级钻取用户
           result = result.filter(function (u) {return String(u[step.dim]) === step.value})
-        })
-      }
-      var s = this.search
-      if (s) {
-        result = result.filter(function (u) {// 搜索过滤后的用户
-          return SF.some(function (k) { return u[k] && String(u[k]).indexOf(s) !== -1 })
         })
       }
       return result
@@ -214,9 +207,11 @@ export default {
   },
 
   methods: {
-    loadUsers: function () {
+    loadUsers: function (search) {// 加载用户数据（支持过滤）
       var self = this
-      fetch('http://localhost:3001/api/users')
+      var url = 'http://localhost:3001/api/users'
+      if (search) url += '?search=' + encodeURIComponent(search)
+      fetch(url)
         .then(function (res) { return res.json() })
         .then(function (json) { if (json.success) { self.users = json.data } })
         .catch(function (e) { self.$message.error('加载失败：' + e.message) })
@@ -309,7 +304,7 @@ export default {
       this.drillPath = this.drillPath.slice(0, index)
       this.renderChart()
     },
-    // ----批量操作----
+    // ----批量删除----
     onSelect: function (rows) {// 更新selectedIds数组
       this.selectedIds = rows.map(function (r) { return r.id })
     },
@@ -323,30 +318,27 @@ export default {
             body: JSON.stringify({ ids: self.selectedIds })
           }).then(function (res) { return res.json() })
             .then(function (json) {
-              if (json.success) { self.selectedIds = []; self.loadUsers(); self.$message.success('删除成功') }
+              if (json.success) {
+                self.selectedIds = [];
+                self.loadUsers(); 
+                self.$message.success('删除成功') 
+              }
             })
         }).catch(function () {})
-    },
-    batchSet: function (status) {// 批量设置状态
-      var self = this
-      fetch('http://localhost:3001/api/users/batch-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: self.selectedIds, status: status })
-      }).then(function (res) { return res.json() })
-        .then(function (json) {
-          if (json.success) { self.selectedIds = []; self.loadUsers(); self.$message.success('修改成功') }
-        })
     },
     // ----弹窗----
     openPopup: function (mode, user) {// 打开弹窗
       this.popupMode = mode
       this.dialogVisible = true
-      if (mode === 'add') {
-        this.popupData = { name: '', department: '', role: '用户', year: '2024', email: '', phone: '', address: '' }
+      if (mode === 'add') {// 添加用户
+        this.popupData = { status: '未激活', department: '', role: '用户', name: '', year: '2024', email: '', phone: '', address: '' }
       } else {
         this.popupData = Object.assign({}, user)
       }
+    },
+     getOptions: function (f) {// 获取下拉框选项
+      if (f.key === 'group') { return GROUPS[this.popupData.department] || [] }// 各部门的小组选项
+      return f.options
     },
     savePopup: function () {// 保存弹窗数据
       var self = this
@@ -354,38 +346,49 @@ export default {
         self.$message.warning('请填写姓名和邮箱')
         return
       }
-      if (self.popupMode === 'add') {
+      if (self.popupMode === 'add') {// 新增用户
         fetch('http://localhost:3001/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(self.popupData)
-        }).then(function (res) { return res.json() })
-          .then(function (json) {
-            if (json.success) { self.loadUsers(); self.$message.success('添加成功'); self.dialogVisible = false }
+          body: JSON.stringify(self.popupData)// 由JavaScript对象 转为 JSON字符串（因为HTTP 请求只能传输文本）
+        }).then(function (res) { return res.json() })// res.json是把JSON字符串 转为 JavaScript对象
+          .then(function (json) {// json就是res.json（）；前一个 .then 的 return 值，会自动传给下一个 .then 的参数。
+            if (json.success) {
+              //用后端返回的 id 更新 popupData
+              self.popupData.id = json.id
+              // 把新用户加入本地数组，避免重新加载
+              self.users.unshift(Object.assign({}, self.popupData))
+              self.$message.success('添加成功')
+              self.dialogVisible = false
+            }
           })
       } else {
-        fetch('http://localhost:3001/api/users/' + self.popupData.id, {
+        fetch('http://localhost:3001/api/users/' + self.popupData.id, {// 编辑用户
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(self.popupData)
         }).then(function (res) { return res.json() })
           .then(function (json) {
-            if (json.success) { self.loadUsers(); self.$message.success('保存成功'); self.dialogVisible = false }
+            if (json.success) {
+              self.loadUsers();
+              self.$message.success('保存成功'); 
+              self.dialogVisible = false }
           })
       }
     },
-    deleteUser: function (user) {
+    deleteUser: function (user) {// 删除用户
       var self = this
       self.$confirm('删除「' + user.name + '」？', '提示', { type: 'warning' })
         .then(function () {
           fetch('http://localhost:3001/api/users/' + user.id, { method: 'DELETE' })
             .then(function (res) { return res.json() })
-            .then(function (json) { if (json.success) { self.loadUsers(); self.$message.success('删除成功') } })
+            .then(function (json) {
+              if (json.success) {
+                self.loadUsers();
+                self.$message.success('删除成功') 
+              } 
+            })
         }).catch(function () {})
-    },
-    getOptions: function (f) {// 获取下拉框选项
-      if (f.key === 'group') { return GROUPS[this.popupData.department] || [] }// 各部门的小组选项
-      return f.options
     }
   }
 }
@@ -423,7 +426,7 @@ export default {
 .kpi-metric { color: #666; font-size: 11px; margin-top: 6px; }
 /* 搜索与批量 */
 .search-bar { display: flex; gap: 10px; margin-bottom: 15px; padding-right: 50px; }
-.batch-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 12px; border-radius: 8px; background: #0f3460; }
+.batch-bar {display: flex;align-items: center;gap: 10px;padding: 12px 16px;margin-bottom: 12px;border-radius: 8px;background: #0f3460;}
 .batch-bar span { color: #e2e2e2; font-size: 14px; }
 /* 分页 */
 .pagination-bar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 15px; color: #666; font-size: 14px; }

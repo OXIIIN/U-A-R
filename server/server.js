@@ -2,10 +2,10 @@
 const express = require('express')
 const cors = require('cors')
 const fetch = require('node-fetch')
-const dbModule = require('./db')// 新增：导入数据库模块
+const dbModule = require('./db')// 导入数据库模块
 const app = express()
 app.use(cors())
-app.use(express.json())
+app.use(express.json())// // 注册 JSON 解析中间件，自动把请求体中的 JSON 字符串转为 JS 对象
 
 const API_KEY = process.env.DASHSCOPE_API_KEY
 console.log('API Key:', API_KEY ?
@@ -20,42 +20,39 @@ year(入职年份，取值：2018-2024),score(绩效分数，0-100之间的整�
 
 const SYSTEM_PROMPT = `你是一个数据分析助手。用户会用自然语言提问数据相关问题。
 
-请根据问题生成 SQLite 语法的 SQL 查询语句，并判断分组维度和统计指标。
+请根据问题生成 SQLite 语法的 SQL 查询语句。
 
 返回格式必须严格为以下 JSON，不要包含任何其他文字、代码块标记或解释：
 {
   "sql": "SELECT ... FROM users WHERE ... GROUP BY ...",
   "chart_type": "bar",
-  "title": "图表标题",
-  "dimension": "department",
-  "metric": "count",
-  "filter": [{"field": "department", "value": "技术部"}, {"field": "year", "value": "2024"}]
+  "title": "图表标题"
 }
 
 chart_type 只能是：bar, line, pie, radar, scatter
-dimension 只能是：department, group, name, role, year, status
-metric 只能是：count, avg, max, min
 
-重要：用户说"部门"时 dimension 填 department，说"小组"时 dimension 填 group。
-重要：SQL 中 "group" 是保留字，必须写成 "group"（双引号包裹），例如 SELECT "group", COUNT(*) ... GROUP BY "group"
-
-filter 规则：
-- filter 是数组格式，可以包含多个筛选条件
-- 如果问题中有筛选条件，按自然语言的逻辑顺序填入（先出现的条件在前）
-- 例如"技术部2024年入职的" → [{"field":"department","value":"技术部"},{"field":"year","value":"2024"}]
-- 如果没有筛选条件，填空数组 []
+SQL 规则：
+1. "group" 是保留字，所有引用 group 字段的地方必须写成 "group"（双引号包裹）
+   例如 SELECT "group", COUNT(*) ... GROUP BY "group"
+2. 统计列必须使用以下固定别名（as 关键字）：
+   - 统计人数：COUNT(*) as count
+   - 平均分：ROUND(AVG(score), 2) as avg
+   - 最高分：MAX(score) as max
+   - 最低分：MIN(score) as min
+3. 查询结果的第一列必须是分组维度（用于图表分类轴），第二列必须是统计结果（用于图表数值轴）
+4. 不要使用 SUM 函数，本项目没有求和场景
 
 数据表结构：
 ${SCHEMA}`
 
-// ----AI 分析路由-----
+// ----AI 分析-----
 app.post('/api/ask', async (req, res) => {
   const question = req.body.question
-  if (!question || !question.trim()) {
+  if (!question || !question.trim()) {// 空输入防御
     return res.json({ success: false, error: '请输入问题' })
   }
-  try {
-    const resp = await fetch(
+  try {// 调用大模型API
+    const resp = await fetch(// await 是"等待异步操作完成"。大模型需要几秒钟思考，await 让代码停在这里等结果回来，再执行下一行
       'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       {
         method: 'POST',
@@ -73,19 +70,19 @@ app.post('/api/ask', async (req, res) => {
         })
       }
     )
-    const data = await resp.json()
+    const data = await resp.json()// 解析大模型响应
     console.log('API 响应：', JSON.stringify(data, null, 2))
-
+    // 错误检查
     if (data.error) {
       return res.json({ success: false, error: data.error.message || JSON.stringify(data.error) })
     }
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return res.json({ success: false, error: 'API返回格式异常：' + JSON.stringify(data) })
     }
-
-    const content = data.choices[0].message.content
+    // 处理数据
+    const content = data.choices[0].message.content// 提取
     console.log('大模型原始返回：', content)
-    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()// 清理markdown标记
     const result = JSON.parse(jsonStr)
 
     res.json({ success: true, data: result })
@@ -94,32 +91,42 @@ app.post('/api/ask', async (req, res) => {
     res.json({ success: false, error: e.message })
   }
 })
-
-// ----用户 CRUD 路由（新增）----
+// 执行SQL
+app.post('/api/query', (req, res) => {
+  try {
+    const sql = req.body.sql
+    if (!sql || !sql.trim().toUpperCase().startsWith('SELECT')) {
+      return res.json({ success: false, error: '只允许查询操作' })
+    }
+    res.json({ success: true, data: dbModule.queryAll(sql) })// 执行sql
+  } catch (e) {
+    res.json({ success: false, error: e.message })
+  }
+})
 
 // 查询用户列表（支持搜索）
 app.get('/api/users', (req, res) => {
   const search = req.query.search || ''
   let users
   if (search) {
-    users = dbModule.queryAll(
-      'SELECT * FROM users WHERE name LIKE ? OR department LIKE ? OR email LIKE ? OR status LIKE ? OR role LIKE ?',
-      ['%' + search + '%', '%' + search + '%', '%' + search + '%', '%' + search + '%', '%' + search + '%']
-    )
+    const fields = ['name', 'department', '"group"', 'role', 'status', 'year', 'email', 'phone', 'address']
+    const sql = 'SELECT * FROM users WHERE ' + fields.map(f => f + ' LIKE ?').join(' OR ')
+    const params = fields.map(() => '%' + search + '%')
+    users = dbModule.queryAll(sql + ' ORDER BY id DESC', params)// 返回搜索过滤后的数据
   } else {
-    users = dbModule.queryAll('SELECT * FROM users')
+    users = dbModule.queryAll('SELECT * FROM users ORDER BY id DESC')// 返回所有用户数据（按 id 降序，最新的排最前
   }
   res.json({ success: true, data: users })
 })
 
 // 新增用户
 app.post('/api/users', (req, res) => {
-  const u = req.body
-  const result = dbModule.run(
+  const u = req.body// 中间件已经转为json格式
+  const result = dbModule.run(// 新增数据写入数据库
     'INSERT INTO users (id, status, department, "group", name, role, year, score, email, phone, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
     [Date.now(), '未激活', u.department, u.group, u.name, u.role || '用户', u.year || '2024', 0, u.email, u.phone || '未填写', u.address || '未填写']
   )
-  res.json({ success: true, id: result.lastInsertRowid })
+  res.json({ success: true, id: result.lastInsertRowid })// 返回 id给前端，前端可以立即使用（json格式）
 })
 
 // 编辑用户
@@ -134,37 +141,24 @@ app.put('/api/users/:id', (req, res) => {
 
 // 删除用户
 app.delete('/api/users/:id', (req, res) => {
-  dbModule.run('DELETE FROM users WHERE id=?', [Number(req.params.id)])
+  dbModule.run('DELETE FROM users WHERE id=?', [Number(req.params.id)])// 删除指定id用户
   res.json({ success: true })
 })
 
 // 批量删除
 app.post('/api/users/batch-delete', (req, res) => {
   const ids = req.body.ids
-  ids.forEach(id => { dbModule.run('DELETE FROM users WHERE id=?', [id]) })
+  ids.forEach(id => { dbModule.run('DELETE FROM users WHERE id=?', [id]) })// 逐个删除指定id的用户
   res.json({ success: true })
 })
 
-// 批量修改状态
-app.post('/api/users/batch-status', (req, res) => {
-  const ids = req.body.ids
-  const status = req.body.status
-  ids.forEach(id => { dbModule.run('UPDATE users SET status=? WHERE id=?', [status, id]) })
-  res.json({ success: true })
-})
-
-// SQL 查询（AI 分析用）
-app.post('/api/query', (req, res) => {
-  try {
-    const sql = req.body.sql
-    if (!sql || !sql.trim().toUpperCase().startsWith('SELECT')) {
-      return res.json({ success: false, error: '只允许查询操作' })
-    }
-    res.json({ success: true, data: dbModule.queryAll(sql) })
-  } catch (e) {
-    res.json({ success: false, error: e.message })
-  }
-})
+// 批量修改状态（可拓展为批量编辑）
+// app.post('/api/users/batch-status', (req, res) => {
+//   const ids = req.body.ids
+//   const status = req.body.status
+//   ids.forEach(id => { dbModule.run('UPDATE users SET status=? WHERE id=?', [status, id]) })// 逐个修改指定id用户的状态
+//   res.json({ success: true })
+// })
 
 // ----启动服务器（改为先初始化数据库再启动）----
 dbModule.initDB(() => {

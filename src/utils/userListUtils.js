@@ -1,10 +1,10 @@
 // 用户字段配置（弹窗表单） 
 var FIELDS = [
   { key: 'status',     label: '状态',     modes: ['detail', 'edit'],        options: ['活跃', '未激活', '已封禁'] },
-  { key: 'name',       label: '姓名',     modes: ['detail', 'add', 'edit'] },
   { key: 'department', label: '部门',     modes: ['detail', 'add', 'edit'], options: ['技术部', '市场部', '销售部', '产品部'] },
   { key: 'group',      label: '小组',     modes: ['detail', 'edit'],        options: [] },
   { key: 'role',       label: '角色',     modes: ['detail', 'add', 'edit'], options: ['管理员', '编辑', '用户'] },
+  { key: 'name',       label: '姓名',     modes: ['detail', 'add', 'edit'] },
   { key: 'year',       label: '入职年份', modes: ['detail', 'add', 'edit'], options: ['2018','2019','2020','2021','2022','2023','2024'] },
   { key: 'score',      label: '绩效分',   modes: ['detail', 'edit'] },
   { key: 'email',      label: '邮箱',     modes: ['detail', 'add', 'edit'] },
@@ -39,9 +39,6 @@ var DNS = ['heatmap', 'wordcloud', 'sankey', 'boxplot', 'nestedpie']
 // 支持指标切换的图表类型
 var MYS = ['pie', 'rose', 'funnel']
 
-// 搜索字段  
-var SF = ['status', 'department', 'group', 'name', 'role', 'year', 'email', 'phone', 'address']
-
 // 表格列配置  
 var TABLECOLS = [
   { label: '部门', prop: 'department', width: 100 },
@@ -52,5 +49,5 @@ var TABLECOLS = [
 ]
 
 export  {
-  FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, SF, TABLECOLS
+  FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, TABLECOLS
 }
