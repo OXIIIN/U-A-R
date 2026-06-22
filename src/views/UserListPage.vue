@@ -141,7 +141,7 @@ export default {
     dialogVisible: false, popupMode: null, popupData: {},popupTitles: { detail: '详情', add: '添加用户', edit: '编辑用户' },
     // 配置项（只读）
     fields: FIELDS, chartGroups: CG, dimOptions: DIM_OPTS, tableCols: TABLECOLS,
-    statusOptions: ['活跃','未激活','已封禁'],statusTagMap: { '活跃': 'success', '未激活': 'info', '已封禁': 'danger' }
+    statusTagMap: { '活跃': 'success', '未激活': 'info', '已封禁': 'danger' }
   }},
 
   computed: {

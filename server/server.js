@@ -13,7 +13,7 @@ console.log('API Key:', API_KEY ?
 
 // ----提示词----
 const SCHEMA = `数据表 users，字段如下：
-id(整数,主键),status(状态，取值：活跃/未激活/已封禁),department(部门), group(小组), name(姓名), role(角色，取值：管理员/编辑/用户),
+id(整数,主键),status(状态，取值：活跃/未激活/已封禁),department(部门), "group"(小组), name(姓名), role(角色，取值：管理员/编辑/用户),
 year(入职年份，取值：2018-2024),score(绩效分数，0-100之间的整数), email(邮箱), phone(电话), address(地址)
 
 示例部门：技术部(含前端组/后端组/运维组)、市场部(含推广组/调研组)、销售部(含演示组/渠道组)、产品部(含产品组/设计组)`
@@ -36,7 +36,7 @@ SQL 规则：
    例如 SELECT "group", COUNT(*) ... GROUP BY "group"
 2. 统计列必须使用以下固定别名（as 关键字）：
    - 统计人数：COUNT(*) as count
-   - 平均分：ROUND(AVG(score), 2) as avg
+   - 平均分：ROUND(AVG(score), 1) as avg
    - 最高分：MAX(score) as max
    - 最低分：MIN(score) as min
 3. 查询结果的第一列必须是分组维度（用于图表分类轴），第二列必须是统计结果（用于图表数值轴）

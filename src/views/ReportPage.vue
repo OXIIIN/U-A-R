@@ -234,7 +234,7 @@ export default {
         isSubDim: self.isSubDim, selectedSubDim: self.selectedSubDim, subDimValues: self.subDimValues,
         selectedMets: self.selectedMets
       }
-      ;(self.isMergeRows ? self.selectedDims : [self.selectedDims[0]]).forEach(function (dim) {// 主维度 如部门，角色
+      ;self.selectedDims.forEach(function (dim) {// 主维度 如部门，角色
         var groups = groupBy(self.users, dim)
         Object.keys(groups).forEach(function (k) {// 分组 如 技术部，产品部
           var row = self.isMergeRows ? { _dim: dim, _p: k } : { _p: k }
@@ -317,7 +317,7 @@ export default {
                 type: json.data.chart_type || 'bar',
                 title: json.data.title || '统计结果',
                 categories: chartData.categories,
-                series: [{ name: MET_LABELS[chartData.metric] || chartData.metric, data: chartData.values }],
+                series: [{ name: MET_LABELS[chartData.metric], data: chartData.values }],
                 dimension: chartData.dimension,
                 metric: chartData.metric
               }
@@ -332,12 +332,10 @@ export default {
       })
     },
     dataFromSQL: function (rows) {
-      // rows 是 SQL 返回的数组，每项是一个对象
-      // 如 [{group:'前端组', count:3}, {group:'后端组', count:2}]
       if (!rows || !rows.length) return { categories: [], values: [] , dimension: '', metric: '' }
-      var keys = Object.keys(rows[0])
-      var catKey = keys[0]    // 第一列 = 分类（如 group, department, year）
-      var valKey = keys[1]    // 第二列 = 数值（如 count, avg, max）
+      var keys = Object.keys(rows[0])// rows 是 SQL 返回的数组，每项是一个对象。如 [{group:'前端组', count:3}, {group:'后端组', count:2}]
+      var catKey = keys[0]    // 第1列 = 分类（如 group, department, year）
+      var valKey = keys[1]    // 第2列 = 数值（如 count, avg, max）
       var categories = rows.map(function (r) { return String(r[catKey] || '未知') })
       var values = rows.map(function (r) { return r[valKey] != null ? r[valKey] : 0 })
       return { categories: categories, values: values, dimension: catKey, metric: valKey  }
