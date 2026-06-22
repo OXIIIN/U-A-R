@@ -364,7 +364,7 @@ export default {
         }
       return { rowspan: count, colspan: 1 }
     },   
-    getLabel: function (type, key) {// 获取编辑后的内容
+    getLabel: function (type, key) {// 获取已编辑内容
       switch (type) {
         case 'dim':    return this.cusLabels.dim[key] || DIM_LABELS[key] 
         case 'row':    return this.cusLabels.row[key] || key
