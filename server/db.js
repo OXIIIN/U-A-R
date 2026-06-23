@@ -93,16 +93,14 @@ function queryAll(sql, params) {
 
 // ----执行（INSERT/UPDATE/DELETE）----
 function run(sql, params) {
-  if (params) {
-    db.run(sql, params.map(function (p) {
-      return p === undefined ? null : p 
-    })) 
-  }
-  else { db.run(sql) }
-  saveDB()// 每次写操作后保存到文件，防止数据丢失
-  return {
-    lastInsertRowid: db.exec('SELECT last_insert_rowid()')[0].values[0][0]
-  }
+    // 执行 SQL
+    db.run(sql, params && params.map(p => p == null ? null : p));
+    const changes = db.getRowsModified();// 获取受影响行数（DELETE/UPDATE 会用到）
+    const lastInsertRowid = /^\s*INSERT/i.test(sql)// 获取最后插入的 rowid（仅 INSERT 有效）
+        ? db.exec('SELECT last_insert_rowid()')[0].values[0][0]
+        : null;
+    saveDB();
+    return { lastInsertRowid, changes };
 }
 
 module.exports = { initDB, queryAll, run }

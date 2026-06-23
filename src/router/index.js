@@ -30,7 +30,6 @@ const router = new VueRouter({
   mode: 'history',
   routes
 })
-
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const isLoggedIn = !!localStorage.getItem('token')

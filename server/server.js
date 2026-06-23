@@ -1,8 +1,8 @@
 // ----导入依赖----
-const express = require('express')
 const cors = require('cors')
 const fetch = require('node-fetch')
 const dbModule = require('./db')// 导入数据库模块
+const express = require('express')
 const app = express()
 app.use(cors())
 app.use(express.json())// // 注册 JSON 解析中间件，自动把请求体中的 JSON 字符串转为 JS 对象
@@ -103,7 +103,6 @@ app.post('/api/query', (req, res) => {
     res.json({ success: false, error: e.message })
   }
 })
-
 // 查询用户列表（支持搜索）
 app.get('/api/users', (req, res) => {
   const search = req.query.search || ''
@@ -118,17 +117,18 @@ app.get('/api/users', (req, res) => {
   }
   res.json({ success: true, data: users })
 })
-
 // 新增用户
 app.post('/api/users', (req, res) => {
-  const u = req.body// 中间件已经转为json格式
-  const result = dbModule.run(// 新增数据写入数据库
-    'INSERT INTO users (id, status, department, "group", name, role, year, score, email, phone, address) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-    [Date.now(), '未激活', u.department, u.group, u.name, u.role || '用户', u.year || '2024', 0, u.email, u.phone || '未填写', u.address || '未填写']
-  )
-  res.json({ success: true, id: result.lastInsertRowid })// 返回 id给前端，前端可以立即使用（json格式）
-})
-
+    const u = req.body;
+    const result = dbModule.run(
+        'INSERT INTO users (status, department, "group", name, role, year, score, email, phone, address) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        ['未激活', u.department, u.group, u.name, u.role || '用户', u.year || '2024', 0, u.email, u.phone || '未填写', u.address || '未填写']
+    );
+    if (result.changes === 0) {
+        return res.json({ success: false, error: '新增失败' });
+    }
+    res.json({ success: true, id: result.lastInsertRowid });
+});
 // 编辑用户
 app.put('/api/users/:id', (req, res) => {
   const u = req.body
