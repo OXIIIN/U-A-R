@@ -388,7 +388,7 @@ export default {
         width: Math.max(rect.width, 100) + 'px', height: Math.max(rect.height, 30) + 'px' }
       var self = this
       this.$nextTick(function () {
-        if (self.$refs.floatInput) {
+        if (self.$refs.floatInput) { 
           self.$refs.floatInput.value = self._editBuf;// 填入原始内容到输入框
           self.$refs.floatInput.focus(); self.$refs.floatInput.select() }
       })

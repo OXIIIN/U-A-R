@@ -14,7 +14,6 @@ function initDB(callback) {
     } else {// data.db文件不存在
       db = new SQL.Database()// 创建一个空的数据库实例
     }
-
     // 若不存在，则创建一个表（无数据）
     db.run(`
       CREATE TABLE IF NOT EXISTS users (
@@ -31,7 +30,6 @@ function initDB(callback) {
         address TEXT DEFAULT '未填写'
       )
     `)
-
     // 表为空时插入初始数据（20个用户）
     const result = db.exec('SELECT COUNT(*) as c FROM users')// 格式为[{ columns: ['c'], values: [[20]] }]
     const count = result[0].values[0][0]
@@ -65,7 +63,6 @@ function initDB(callback) {
       stmt.free()// 释放 prepared statement
       console.log('已插入 ' + initialUsers.length + ' 条初始数据')
     }
-
     saveDB()// 保存到文件
     callback()// 数据库就绪后执行回调（启动服务器）
   })
@@ -73,7 +70,7 @@ function initDB(callback) {
 
 // ----保存数据库到文件----
 function saveDB() {
-  const data = db.export()// 导出为 Uint8Array
+  const data = db.export()// 导出数据库二进制数据
   const dbData = Buffer.from(data)// 转为 Node.js dbData
   fs.writeFileSync(dbPath, dbData)// 写入文件
 }

@@ -148,8 +148,9 @@ app.delete('/api/users/:id', (req, res) => {
 // 批量删除
 app.post('/api/users/batch-delete', (req, res) => {
   const ids = req.body.ids
-  ids.forEach(id => { dbModule.run('DELETE FROM users WHERE id=?', [id]) })// 逐个删除指定id的用户
-  res.json({ success: true })
+  const placeholders = ids.map(() => '?').join(',')
+  const result = dbModule.run(`DELETE FROM users WHERE id IN (${placeholders})`, ids)
+  res.json({ success: true, deleted: result.changes })
 })
 
 // 批量修改状态（可拓展为批量编辑）
