@@ -70,7 +70,7 @@ app.post('/api/ask', async (req, res) => {
         })
       }
     )
-    const data = await resp.json()// 解析大模型响应
+    const data = await resp.json()// 解析大模型的响应
     console.log('API 响应：', JSON.stringify(data, null, 2))
     // 错误检查
     if (data.error) {
