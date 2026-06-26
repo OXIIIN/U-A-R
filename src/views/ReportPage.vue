@@ -6,7 +6,7 @@
       <div>
         <el-button type="danger" plain @click="exportFile('csv')">导出 Excel</el-button>
         <el-button type="danger" plain @click="exportFile('doc')">导出 Word</el-button>
-        <el-button type="danger" plain @click="exportPDF">导出 PDF</el-button>
+        <el-button type="danger" plain @click="exportFile('pdf')">导出 PDF</el-button>
         <el-button type="danger" plain @click="isPrint=true">打印设置</el-button>
         <el-button type="danger" plain @click="$router.push('/')">返回管理页</el-button>
       </div>
@@ -185,7 +185,7 @@
 </template>
 
 <script>
-import { toCSV, downloadFile} from '../utils/exportUtils'
+import { exportCSV, exportWord, exportPDF} from '../utils/exportUtils'
 import { getChartOption } from '../utils/chartUtils'
 import { MARGIN_MAP, DIM_OPTIONS, MET_OPTIONS, DIM_LABELS, MET_LABELS, groupBy, fillData } from '../utils/reportUtils'
 import * as echarts from 'echarts'
@@ -206,8 +206,8 @@ export default {
       // 打印
       isPrint: false, printSettings: {
        paperSize: 'A4', orientation: 'landscape', margin: 'narrow',
-       showCover: true, coverTitle: '数据统计报表', coverSubtitle: '',
-       showBackCover: true, backCoverTitle: '封底', backCoverSubtitle: '' 
+       showCover: true, coverTitle: '', coverSubtitle: '',
+       showBackCover: true, backCoverTitle: '', backCoverSubtitle: '' 
       }
     }
   },
@@ -410,46 +410,37 @@ export default {
       this.isEdit = false; this.editingCell = null; this.floatStyle = {}
     },
     // ----导出与打印----
-    exportData: function (format) {// 导出文件的数据
+    getTableData: function () {
       var self = this, cols = []
-      if (self.isMergeRows) 
-      cols.push({ prop: '_dim', label: '维度' })
+      if (self.isMergeRows) cols.push({ prop: '_dim', label: '维度' })
       cols.push({ prop: '_p', label: self.isMergeRows ? '分组' : self.colName })
       self.selectedMets.forEach(function (mt) {
-        if (self.isSubDim) { self.subDimValues.forEach(function (sv) {
-         cols.push({
-          prop: '_v_' + mt + '_' + sv,
-          label: MET_LABELS[mt] + '-' + sv }) 
-        })}
-        else {
-         cols.push({
-          prop: '_v_' + mt, 
-          label: MET_LABELS[mt]
-        })}
+        if (self.isSubDim) {
+          self.subDimValues.forEach(function (sv) {
+            cols.push({ prop: '_v_' + mt + '_' + sv, label: MET_LABELS[mt] + '-' + sv })
+          })
+        } else {
+          cols.push({ prop: '_v_' + mt, label: MET_LABELS[mt] })
+        }
       })
-      var headers = cols.map(function (c) { return c.label })
-      var rows = self.dataRows.map(function (r) {
-        return cols.map(function (c) {
-          return r[c.prop] == null ? '' : String(r[c.prop]) 
-        }) 
-      })
-      // csv格式
-      if (format === 'csv') return toCSV(headers, rows)
-      // html格式（导出.doc文件时，word直接打开html）
-      var h = '<html><head><meta charset="utf-8"><style>'
-      h += 'table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:8px;text-align:center}'
-      h += 'th{background:#f0f0f0;font-weight:bold}</style></head><body><h2 style="text-align:center">统计报表</h2>'
-      h += '<table><tr>' + headers.map(function (t) { return '<th>' + t + '</th>' }).join('') + '</tr>'
-      rows.forEach(function (r) {
-        h += '<tr>' + r.map(function (v) { return '<td>' + v + '</td>' }).join('') + '</tr>' 
-      })
-      return h + '</table></body></html>'
+      return {
+        headers: cols.map(function (c) { return c.label }),
+        rows: self.dataRows.map(function (r) {
+          return cols.map(function (c) { return r[c.prop] == null ? '' : String(r[c.prop]) })
+        })
+      }
     },
-    exportPDF: function () { window.print() },
-    exportFile: function (format) {// 文件下载
-      var mime = format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/msword;charset=utf-8;'// MIME 类型，告诉浏览器文件的内容类型
-      var ext = format === 'csv' ? '.csv' : '.doc'// 文件扩展名
-     downloadFile(this.exportData(format), '统计报表_' + new Date().toLocaleDateString() + ext, mime)
+    exportFile: function (format) {
+      var data = this.getTableData()
+      var name = '统计报表_' + new Date().toLocaleDateString()
+      if (format === 'pdf') {
+        var ps = this.printSettings
+        exportPDF(this.$el, name + '.pdf', ps.paperSize, ps.orientation)
+      } else if (format === 'csv') {
+        exportCSV(data.headers, data.rows, name + '.csv')
+      } else {
+        exportWord(data.headers, data.rows, name + '.doc', '统计报表')
+      }
     },
     doPrint: function () {// 执行打印
       var ps = this.printSettings, margin = MARGIN_MAP[ps.margin] || '15mm'
