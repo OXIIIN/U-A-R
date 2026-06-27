@@ -1,19 +1,36 @@
 // 图表配色方案
 var CC = ['#e94560','#4ecb71','#38bdf8','#f0c040','#ff7849','#6c5ce7','#888','#00cec9']
+// 状态颜色
+var C=['#888','#4ecb71','#e94560']
 // 用户状态
-var STS = ['活跃','未激活','已封禁']
+var STS = ['未激活','活跃','已封禁']
 // 图例通用配置
 var LEG = {bottom:0,textStyle:{color:'#999'}}
+// ---- 绩效等级 ----
+function getLevel(score) {
+  var s = Number(score) || 0
+  if (s === 0) return '待评估'
+  if (s < 60) return '不合格'
+  if (s < 80) return '合格'
+  if (s < 90) return '良好'
+  return '优秀'
+}
+function dimVal(u, dim) {
+  return dim === 'level' ? getLevel(u.score) : u[dim]
+}
 // 按状态统计人数
 function cnt(u,d,c,s){return c.map(function(x){
-  return u.filter(function(u2){return u2[d]===x&&u2.status===s}).length
+  return u.filter(function(u2){return dimVal(u2,d)===x&&u2.status===s}).length
 })}
 // 平均分
-function avgD(cats,users,dim){
+function avgD(cats,users,dim,metric){
+  var field = metric === 'avg_attendance' ? 'attendance' : 'score'
   return cats.map(function(cat){
-    var grp=users.filter(function(u){return String(u[dim])===cat})
+    var grp=users.filter(function(u){
+      return dim==='level' ? getLevel(u[field])===cat : dimVal(u,dim)===cat
+    })
     if(!grp.length)return{name:cat,value:0}
-    var sum=grp.reduce(function(a,u){return a+Number(u.score||0)},0)
+    var sum=grp.reduce(function(a,u){return a+Number(u[field]||0)},0)
     return{name:cat,value:+(sum/grp.length).toFixed(1)}
   })
 }
@@ -29,11 +46,91 @@ function stdOpt(cats,S,withLegend,trigger){// （分类轴 + 数值轴 + 图例 
   if(withLegend)o.legend=LEG// 图例
   return o
 }
+// KPI指标卡
+function kpiOpt(cats, vals, users, dim) {
+  var data = avgD(cats, users, dim)
+  var total = data.reduce(function (a, d) { return a + d.value }, 0)
+  return { cards: data.map(function (d) {
+    return { name: d.name, value: d.value, pct: total ? (d.value / total * 100).toFixed(1) + '%' : '-' }
+  })}
+}
+// 热力区域图
+var CITY_GEO = {// 建立城市名 → 经纬度的映射表
+  '成都': [104.06, 30.67], '上海': [121.48, 31.22], '广州': [113.23, 23.16],
+  '绵阳': [104.73, 31.47], 
+  // '杭州': [120.19, 30.26],  '南京': [118.78, 32.04],
+  // '北京': [116.46, 39.92], '天津': [117.20, 39.13],  '重庆': [106.54, 29.59],
+  // '苏州': [120.62, 31.32], '深圳': [114.07, 22.62],  '武汉': [114.31, 30.52],
+  // '长沙': [112.98, 28.19],  '西安': [108.95, 34.27], '郑州': [113.65, 34.76],  '济南': [117.00, 36.65],
+  // '青岛': [120.33, 36.07],  '大连': [121.62, 38.92], '昆明': [102.73, 25.04]
+}
+function getCity(address) {// 通过用户地址获取城市
+  if (!address) return null
+  for (var city in CITY_GEO) {
+    if (address.indexOf(city) !== -1) return city
+  }
+  return null
+}
+function heatmapOpt(users, dim) {// 热力区域图
+  var cd = {}// 城市聚合数据 例：{'成都': { total: 25, dimMap: { '2022': 3, '2023': 5, '2024': 3 } }}
+  users.forEach(function (u) {
+    var c = getCity(u.address)
+    if (!c) return
+    if (!cd[c]) 
+    cd[c] = { total: 0, dimMap: {} }// 惰性初始化：如果该城市第一次出现，先创建空对象
+    cd[c].total++
+    var dv = dimVal(u, dim) || '未知'
+    cd[c].dimMap[dv] = (cd[c].dimMap[dv] || 0) + 1// 累加该维度值的计数
+  })
+  var data = Object.keys(cd).map(function (c) {// 将聚合数据转为 ECharts 需要的格式：{城市名，[经度, 纬度, 人数]}
+    return { name: c, value: [CITY_GEO[c][0], CITY_GEO[c][1], cd[c].total] }
+  })
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: function (p) {
+        var d = cd[p.data && p.data.name]// 取出城市名
+        if (!d) return ''
+        var lines = Object.keys(d.dimMap).map(function (k) {// 转为可读的文本行
+          return k + ': ' + d.dimMap[k] + '人'
+        })
+        return p.data.name + '（' + d.total + '人）<br/>' + lines.join('<br/>')
+      }
+    },
+    visualMap: {//  视觉映射
+      min: 0, max: data.length ? Math.max.apply(null, data.map(function (d) { return d.value[2] })) : 1,
+      inRange: { color: ['#33b8cc', '#66ccb8','#ff4f38', '#e62828'] }// 颜色映射区间
+    },
+    geo: {// 地理坐标系
+      map: 'china', 
+      center: [104, 36], zoom: 1.5, aspectScale: 0.75,
+      layoutCenter: ['50%', '50%'], layoutSize: '100%',
+      itemStyle: { areaColor: '#0d1b2e', borderColor: '#1a3a5c', borderWidth: 1 },
+      emphasis: { label: { show: true, color: '#e2e2e2', fontSize: 11 }, itemStyle: { areaColor: '#1a2745' } }
+    },
+    series: [
+      { type: 'heatmap', coordinateSystem: 'geo', data: data, pointSize: 20, blurSize: 30},
+      { type: 'scatter', coordinateSystem: 'geo', data: data, symbolSize: 12,
+        label: { show: true, formatter: function (p) { return p.data.name }, position: 'right', color: '#e2e2e2', fontSize: 10 },
+        itemStyle: { color: '#e94560', borderColor: 'rgba(255,255,255,0.3)', borderWidth: 2 } }
+    ]
+  }
+}
 // ----柱状图----
 function barOpt(type,cats,vals,users,dim){
-  var S=[],C=['#4ecb71','#888','#e94560']
+  var S=[]
   if(type==='bar'){// 分区柱状图
-    S=[{type:'bar',data:vals,itemStyle:{color:'#38bdf8'},barWidth:'40%'}]
+    var dimColors=['#38bdf8','#f0c040','#e94560','#4ecb71','#6c5ce7','#ff7849','#00cec9','#888']
+    S=cats.map(function(cat,i){
+      return{
+        name:cat,type:'bar',
+        data:STS.map(function(s){
+          return users.filter(function(u){return dimVal(u,dim)===cat&&u.status===s}).length
+        }),
+        itemStyle:{color:dimColors[i%dimColors.length]},barWidth:'15%'
+      }
+    })
+    return stdOpt(STS,S,true,'axis')// X轴为状态
   }
   else if(type==='stacked'||type==='multibar'){// 堆积柱状图与多系列柱状图
     S=STS.map(function(s,i){
@@ -76,23 +173,39 @@ function comboOpt(cats,vals,users,dim){// 组合图
 function lineOpt(type,cats,vals,users,dim){
   var S=[]
   if(type==='line'){// 分区折线图
-    S=[{type:'line',data:vals,smooth:true,lineStyle:{color:'#38bdf8'},itemStyle:{color:'#38bdf8'},areaStyle:{color:'rgba(56,189,248,0.15)'}}]
+    S=cats.map(function(cat,i){
+      return{
+        name:cat,type:'line',smooth:true,
+        data:STS.map(function(s){
+          return users.filter(function(u){return dimVal(u,dim)===cat&&u.status===s}).length
+        }),
+        lineStyle:{color:CC[i%CC.length]},
+        itemStyle:{color:CC[i%CC.length]},
+        areaStyle:{color:'rgba(56,189,248,0.1)'}
+      }
+    })
+    return stdOpt(STS,S,true,'axis')
   }
   else if(type==='multiline'){// 多系列折线图
     S=STS.map(function(s,i){
-    return{name:s,type:'line',smooth:true,data:cnt(users,dim,cats,s),lineStyle:{color:CC[i+1]},itemStyle:{color:CC[i+1]}}})
-  }
+    return{
+      name:s,type:'line',smooth:true,
+      data:cnt(users,dim,cats,s),
+      lineStyle:{color:C[i]},
+      itemStyle:{color:C[i]}
+    }
+  })}
   else if(type==='rangearea'){// 范围面积图
-    var mean = vals.reduce(function(a,b){return a+b},0) / vals.length  
-    var std = Math.sqrt(vals.reduce(function(a,b){return a+Math.pow(b-mean,2)},0) / vals.length) 
-    var up = vals.map(function(v){return Math.round(v + std)}) 
-    var lo = vals.map(function(v){return Math.max(0, Math.round(v - std))})
-    var band = up.map(function(v,i){return v - lo[i]})
-    S=[
-      {name:'下限',type:'line',data:lo,smooth:true,lineStyle:{color:'#e2e2e2'},itemStyle:{color:'#e2e2e2'},areaStyle:{color:'#0d1b2e'},stack:'r'},
-      {name:'上限',type:'line',data:band,smooth:true,lineStyle:{color:'#38bdf8'},itemStyle:{color:'#38bdf8'},areaStyle:{color:'rgba(56,189,248,0.2)'},stack:'r'},
-      {name:'实际值',type:'line',data:vals,smooth:true,lineStyle:{color:'#e94560',width:2},itemStyle:{color:'#e94560'},areaStyle:{color:'rgba(233,69,96,0.1)'}}
-    ]
+    var areaAlpha=['rgba(136,136,136,0.2)','rgba(78,203,113,0.2)','rgba(233,69,96,0.2)']
+    S=STS.map(function(s,i){
+      return{
+        name:s,type:'line',smooth:true,
+        data:cnt(users,dim,cats,s),
+        lineStyle:{color:C[i],width:2},
+        itemStyle:{color:C[i]},
+        areaStyle:{color:areaAlpha[i]}
+      }
+    })
   }
   return stdOpt(cats,S,type!=='line')
 }
@@ -138,71 +251,36 @@ function scatterOpt(type,cats,vals,users,dim){
 }
 // ----饼图----
 function pieOpt(type,cats,vals,users,dim,metric){
-  var d=metric==='avg'?avgD(cats,users,dim):cats.map(function(x,i){// 人数与平均分 指标切换
+  var useAvg = metric==='avg'||metric==='avg_attendance'
+  var d = useAvg ? avgD(cats,users,dim,metric) : cats.map(function(x,i){
     return{name:x,value:vals[i],itemStyle:{color:CC[i%CC.length]}}
   })
   var S=[]
-  if(type==='pie'){// 饼图
+  if(type==='pie'){
     S=[{type:'pie',radius:['40%','70%'],data:d,label:{color:'#e2e2e2'}}]
   }
-  else if(type==='rose'){// 玫瑰图
+  else if(type==='rose'){
     S=[{type:'pie',radius:['20%','70%'],roseType:'area',data:d,label:{color:'#e2e2e2'}}]
   }
-  else if(type==='nestedpie'){// 多层饼图
+  else if(type==='nestedpie'){
     var ds={};
     users.forEach(function(u){
-      var k=String(u[dim]);
+      var k=dimVal(u,dim);if(!k)k='未知'
       if(!ds[k])ds[k]={};
       ds[k][u.status]=(ds[k][u.status]||0)+1
     });
-      var inn=Object.keys(ds).map(function(d2){
-        return{name:d2,value:Object.values(ds[d2]).reduce(function(a,b){return a+b},0)}
-      }),out=[];
-      Object.keys(ds).forEach(function(d2){
-        Object.keys(ds[d2]).forEach(function(s){out.push({name:d2+'-'+s,value:ds[d2][s]})})
-      });
-      S=[{type:'pie',radius:['0%','40%'],data:inn,label:{color:'#e2e2e2'}},
-      {type:'pie',radius:['50%','70%'],data:out,label:{color:'#e2e2e2'}}]
+    var inn=Object.keys(ds).map(function(d2){
+      return{name:d2,value:Object.values(ds[d2]).reduce(function(a,b){return a+b},0)}
+    }),out=[];
+    Object.keys(ds).forEach(function(d2){
+      Object.keys(ds[d2]).forEach(function(s){out.push({name:d2+'-'+s,value:ds[d2][s]})})
+    });
+    S=[{type:'pie',radius:['0%','40%'],data:inn,label:{color:'#e2e2e2'}},
+    {type:'pie',radius:['50%','70%'],data:out,label:{color:'#e2e2e2'}}]
   }
   var opt={tooltip:{trigger:'item'},series:S}
   if(type!=='nestedpie'){opt.legend=LEG}
   return opt
-}
-// KPI指标卡
-function kpiOpt(cats, vals, users, dim) {
-  var data = avgD(cats, users, dim)
-  var total = data.reduce(function (a, d) { return a + d.value }, 0)
-  return { cards: data.map(function (d) {
-    return { name: d.name, value: d.value, pct: total ? (d.value / total * 100).toFixed(1) + '%' : '-' }
-  })}
-}
-// 热力区域图
-function heatmapOpt(users,dim){
-  var a1=[],a2=[],s1={},s2={}
-  users.forEach(function(u){
-    var r=u.role,k=String(u[dim])
-    if(!s1[r]){a1.push(r);s1[r]=1}// x轴，角色
-    if(!s2[k]){a2.push(k);s2[k]=1}// y轴，维度
-  })
-  var hd=[]
-  a1.forEach(function(a,ai){
-    a2.forEach(function(b,bi){
-      hd.push([ai,bi,users.filter(function(u){return String(u[dim])===b&&u.role===a}).length])
-    })
-  })
-  var hm=Math.max.apply(null,hd.map(function(x){return x[2]}).concat([1]))
-  return{
-    tooltip:{formatter:function(p){return a1[p.data[0]]+' / '+a2[p.data[1]]+': '+p.data[2]+'人'}},
-    grid:{left:80,right:40,bottom:50,top:20},
-    xAxis:{type:'category',data:a1,axisLabel:{color:'#999'}},
-    yAxis:{type:'category',data:a2,axisLabel:{color:'#999'}},
-    visualMap:{
-      min:0,max:hm,calculable:true,orient:'horizontal',left:'center',bottom:0,
-      inRange:{color:['#16213e','#38bdf8','#e94560']},textStyle:{color:'#999'}
-    },
-    series:[
-      {type:'heatmap',data:hd,label:{show:true,color:'#e2e2e2'},itemStyle:{borderColor:'#1a1a2e',borderWidth:2}}
-    ]}
 }
 // 矩形树图
 function treemapOpt(cats, vals) {
@@ -241,18 +319,32 @@ function wordcloudOpt(users){
 }
 // 漏斗图
 function funnelOpt(cats,vals,users,dim,metric){
-  var d=metric==='avg'
-  ?avgD(cats,users,dim)
-  :cats.map(function(x,i){return{name:x,value:vals[i]}})
-  return{
-    tooltip:{trigger:'item'},
-    legend:LEG,
-    series:[
-      {
-        type:'funnel',left:'10%',top:60,bottom:60,width:'80%',sort:'descending',gap:2,data:d,
-        label:{color:'#e2e2e2'},itemStyle:{borderColor:'#1a1a2e',borderWidth:2}
-      }
+  var d
+  if(metric==='edu'){
+    var eduOrder=['博士','硕士','本科','大专'],eduMap={}
+    users.forEach(function(u){eduMap[u.education]=(eduMap[u.education]||0)+1})
+    var cum=0
+    d=eduOrder.map(function(e){cum+=(eduMap[e]||0);return{name:e+'及以上',value:cum}})
+  }else{
+    var field=metric==='avg_attendance'?'attendance':'score'
+    var thresholds=[
+      {label:'≥0分(已评估)',min:1},
+      {label:'≥60分(合格)',min:60},
+      {label:'≥80分(良好)',min:80},
+      {label:'≥90分(优秀)',min:90}
     ]
+    d=thresholds.map(function(t){
+      return{name:t.label,value:users.filter(function(u){return Number(u[field]||0)>=t.min}).length}
+    })
+  }
+  return{
+    tooltip:{trigger:'item'},legend:LEG,
+    series:[{
+      type:'funnel',left:'10%',top:60,bottom:60,width:'80%',
+      sort:'descending',gap:2,data:d,
+      label:{color:'#e2e2e2'},
+      itemStyle:{borderColor:'#1a1a2e',borderWidth:2}
+    }]
   }
 }
 // 桑基图
@@ -286,36 +378,26 @@ function sankeyOpt(users){
 function boxplotOpt(users,dim){
   var bg={},bc
   users.forEach(function(u){
-    var k=String(u[dim]);
+    var k=dimVal(u,dim);if(!k)k='未知'
     if(!bg[k])bg[k]=[];
     bg[k].push(Number(u.score)||0)
-  })// 分组并收集数据('市场部': [78, 65, 90, 82, 71, 88, 75],)
+  })
   bc=Object.keys(bg)
   var bd=bc.map(function(d){
-    var a=bg[d].slice().sort(function(x,y){return x-y}),n=a.length// 分数排序
-    return[
-      a[0],
-      a[Math.floor(n*0.25)],
-      a[Math.floor(n*0.5)],
-      a[Math.floor(n*0.75)],
-      a[n-1]]
+    var a=bg[d].slice().sort(function(x,y){return x-y}),n=a.length
+    return[a[0],a[Math.floor(n*0.25)],a[Math.floor(n*0.5)],a[Math.floor(n*0.75)],a[n-1]]
   })
-  return stdOpt(
-    bc,
-    [
-      {
-        type:'boxplot',data:bd,
-        label:{show:true,color:'#e2e2e2'},
-        itemStyle:{color:'#38bdf8',borderColor:'#38bdf8'},
-        emphasis:{itemStyle:{color:'#e94560',borderColor:'#e94560'}}
-      }
-    ],
-    false,
-    'item'
-  )
+  return stdOpt(bc,[{
+    type:'boxplot',data:bd,
+    label:{show:true,color:'#e2e2e2'},
+    itemStyle:{color:'#38bdf8',borderColor:'#38bdf8'},
+    emphasis:{itemStyle:{color:'#e94560',borderColor:'#e94560'}}
+  }],false,'item')
 }
 // 统一分发器
 function getChartOption(type, cats, vals, users, dim, metric) { 
+  if (type==='kpi') return kpiOpt(cats,vals,users,dim)
+    if (type==='heatmap') return heatmapOpt(users,dim)
   // 柱状图
   if (['bar','stacked','multibar','contrast'].indexOf(type)!==-1) return barOpt(type,cats,vals,users,dim)
   if (type==='waterfall') return waterfallOpt(cats,vals)
@@ -328,11 +410,9 @@ function getChartOption(type, cats, vals, users, dim, metric) {
   // 饼图
   if (['pie','rose','nestedpie'].indexOf(type)!==-1) return pieOpt(type,cats,vals,users,dim,metric)
   // 其他
-  if (type==='kpi') return kpiOpt(cats,vals,users,dim)
-  if (type==='funnel') return funnelOpt(cats,vals,users,dim,metric)
   if (type==='treemap') return treemapOpt(cats,vals)
-  if (type==='heatmap') return heatmapOpt(users,dim)
   if (type==='wordcloud') return wordcloudOpt(users)
+  if (type==='funnel') return funnelOpt(cats,vals,users,dim,metric)
   if (type==='sankey') return sankeyOpt(users)
   if (type==='boxplot') return boxplotOpt(users,dim)
   return barOpt('bar',cats,vals,users,dim)
@@ -341,17 +421,23 @@ function getChartOption(type, cats, vals, users, dim, metric) {
 export { getChartOption }
 export const CG = [
   {
+    label:'',
+    children:[
+      {label:'KPI指标卡',value:'kpi'},{label:'热力区域图',value:'heatmap'}
+    ]
+  },
+  {
     label:'柱状图',
     children:[
       {label:'分区柱状图',value:'bar'},{label:'堆积柱状图',value:'stacked'},{label:'多系列柱状图',value:'multibar'},
-      {label:'对比柱状图',value:'contrast'},{label:'瀑布图',value:'waterfall'},{label:'组合图',value:'combo'}
+      {label:'对比柱状图',value:'contrast'},{label:'瀑布图',value:'waterfall'}
     ]
   },
   {
     label:'折线图',
     children:[
-      {label:'分区折线图',value:'line'},{label:'多系列折线图',value:'multiline'},
-      {label:'范围面积图',value:'rangearea'},{label:'折线雷达图',value:'lineradar'}
+      {label:'分区折线图',value:'line'},{label:'多系列折线图',value:'multiline'},{label:'折线雷达图',value:'lineradar'},
+      {label:'范围面积图',value:'rangearea'},{label:'组合图',value:'combo'}
     ]
   },
   {
@@ -365,7 +451,7 @@ export const CG = [
   {
     label:'其他',
     children:[
-      {label:'KPI指标卡',value:'kpi'},{label:'漏斗图',value:'funnel'},{label:'矩形树图',value:'treemap'},{label:'热力区域图',value:'heatmap'},
-      {label:'词云图',value:'wordcloud'},{label:'桑基图',value:'sankey'},{label:'箱型图',value:'boxplot'}]
+      {label:'矩形树图',value:'treemap'},{label:'词云图',value:'wordcloud'},{label:'漏斗图',value:'funnel'},
+      {label:'桑基图',value:'sankey'},{label:'箱型图',value:'boxplot'}]
     }
 ]

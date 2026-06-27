@@ -13,10 +13,20 @@ console.log('API Key:', API_KEY ?
 
 // ----提示词----
 const SCHEMA = `数据表 users，字段如下：
-id(整数,主键),status(状态，取值：活跃/未激活/已封禁),department(部门), "group"(小组), name(姓名), role(角色，取值：管理员/编辑/用户),
-year(入职年份，取值：2018-2024),score(绩效分数，0-100之间的整数), email(邮箱), phone(电话), address(地址)
+id(整数,主键),
+status(状态，取值：活跃/未激活/已封禁),
+company(单位，取值：总部/上海分部/广州分部),
+department(部门), "group"(小组),
+role(角色，取值：部长/组长/员工),
+name(姓名), age(年龄，整数), education(学历，取值：大专/本科/硕士/博士),
+email(邮箱), phone(电话), address(地址),
+project(项目，取值：项目A/项目B/项目C/项目D/未分配),
+year(年度，取值：2022/2023/2024),
+quarter(季度，取值：Q1/Q2/Q3/Q4),
+score(绩效分数，0-100), attendance(考勤分，0-100)
 
-示例部门：技术部(含前端组/后端组/运维组)、市场部(含推广组/调研组)、销售部(含演示组/渠道组)、产品部(含产品组/设计组)`
+单位-部门映射：总部(技术部/产品部)、上海分部(市场部)、广州分部(销售部)
+各部门小组：技术部(前端组/后端组/运维组)、市场部(推广组/调研组)、销售部(演示组/渠道组)、产品部(产品组/设计组)`
 
 const SYSTEM_PROMPT = `你是一个数据分析助手。用户会用自然语言提问数据相关问题。
 
@@ -39,6 +49,7 @@ SQL 规则：
    - 平均分：ROUND(AVG(score), 1) as avg
    - 最高分：MAX(score) as max
    - 最低分：MIN(score) as min
+   - 平均考勤分：ROUND(AVG(attendance), 1) as avg_attendance
 3. 查询结果的第一列必须是分组维度（用于图表分类轴），第二列必须是统计结果（用于图表数值轴）
 4. 不要使用 SUM 函数，本项目没有求和场景
 
@@ -108,7 +119,11 @@ app.get('/api/users', (req, res) => {
   const search = req.query.search || ''
   let users
   if (search) {
-    const fields = ['name', 'department', '"group"', 'role', 'status', 'year', 'email', 'phone', 'address']
+    const fields = [
+      'status', 'company', 'department', '"group"', 'role',
+      'name', 'age', 'education', 'email', 'phone', 'address',
+      'project', 'year', 'quarter'
+    ]
     const sql = 'SELECT * FROM users WHERE ' + fields.map(f => f + ' LIKE ?').join(' OR ')
     const params = fields.map(() => '%' + search + '%')
     users = dbModule.queryAll(sql + ' ORDER BY id DESC', params)// 返回搜索过滤后的数据
@@ -119,26 +134,23 @@ app.get('/api/users', (req, res) => {
 })
 // 新增用户
 app.post('/api/users', (req, res) => {
-    const u = req.body;
-    const result = dbModule.run(
-        'INSERT INTO users (status, department, "group", name, role, year, score, email, phone, address) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        ['未激活', u.department, u.group, u.name, u.role || '用户', u.year || '2024', 0, u.email, u.phone || '未填写', u.address || '未填写']
-    );
-    if (result.changes === 0) {
-        return res.json({ success: false, error: '新增失败' });
-    }
-    res.json({ success: true, id: result.lastInsertRowid });
-});
+  const u = req.body
+  const result = dbModule.run(
+    'INSERT INTO users (status, company, department, "group", role, name, age, education, email, phone, address, project, year, quarter, score, attendance) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    ['未激活', u.company, u.department, u.group, u.role || '员工', u.name, u.age || 25, u.education || '本科', u.email, u.phone || '未填写', u.address || '未填写', u.project || '未分配', u.year || '2024', u.quarter || 'Q1', 0, 0]
+  )
+  if (result.changes === 0) return res.json({ success: false, error: '新增失败' })
+  res.json({ success: true, id: result.lastInsertRowid })
+})
 // 编辑用户
 app.put('/api/users/:id', (req, res) => {
   const u = req.body
   dbModule.run(
-    'UPDATE users SET status=?, department=?, "group"=?, name=?, role=?, year=?, score=?, email=?, phone=?, address=? WHERE id=?',
-    [u.status, u.department, u.group, u.name, u.role, u.year, u.score, u.email, u.phone, u.address, Number(req.params.id)]
+    'UPDATE users SET status=?, company=?, department=?, "group"=?, role=?, name=?, age=?, education=?, email=?, phone=?, address=?, project=?, year=?, quarter=?, score=?, attendance=? WHERE id=?',
+    [u.status, u.company, u.department, u.group, u.role, u.name, u.age, u.education, u.email, u.phone, u.address, u.project, u.year, u.quarter, u.score, u.attendance, Number(req.params.id)]
   )
   res.json({ success: true })
 })
-
 // 删除用户
 app.delete('/api/users/:id', (req, res) => {
   dbModule.run('DELETE FROM users WHERE id=?', [Number(req.params.id)])// 删除指定id用户

@@ -1,18 +1,31 @@
 // 用户字段配置（弹窗表单） 
 var FIELDS = [
   { key: 'status',     label: '状态',     modes: ['detail', 'edit'],        options: ['活跃', '未激活', '已封禁'] },
-  { key: 'department', label: '部门',     modes: ['detail', 'add', 'edit'], options: ['技术部', '市场部', '销售部', '产品部'] },
+  { key: 'company',    label: '单位',     modes: ['detail', 'edit', 'add'], options: ['总部', '上海分部', '广州分部'] },
+  { key: 'department', label: '部门',     modes: ['detail', 'edit', 'add'], options: [] },
   { key: 'group',      label: '小组',     modes: ['detail', 'edit'],        options: [] },
-  { key: 'role',       label: '角色',     modes: ['detail', 'add', 'edit'], options: ['管理员', '编辑', '用户'] },
-  { key: 'name',       label: '姓名',     modes: ['detail', 'add', 'edit'] },
-  { key: 'year',       label: '入职年份', modes: ['detail', 'add', 'edit'], options: ['2018','2019','2020','2021','2022','2023','2024'] },
+  { key: 'role',       label: '角色',     modes: ['detail', 'edit', 'add'], options: ['部长', '组长', '员工'] },
+  { key: 'name',       label: '姓名',     modes: ['detail', 'edit', 'add'] },
+  { key: 'age',        label: '年龄',     modes: ['detail', 'edit', 'add'] },
+  { key: 'education',  label: '学历',     modes: ['detail', 'edit', 'add'], options: ['大专', '本科', '硕士', '博士'] },
+  { key: 'email',      label: '邮箱',     modes: ['detail', 'edit', 'add'] },
+  { key: 'phone',      label: '手机号',   modes: ['detail', 'edit', 'add'] },
+  { key: 'address',    label: '地址',     modes: ['detail', 'edit', 'add'] },
+  { key: 'project',    label: '项目',     modes: ['detail', 'edit'], options: ['项目A', '项目B', '项目C', '项目D', '未分配'] },
+  { key: 'year',       label: '年度',     modes: ['detail', 'edit'], options: ['2022', '2023', '2024'] },
+  { key: 'quarter',    label: '季度',     modes: ['detail', 'edit'], options: ['Q1', 'Q2', 'Q3', 'Q4'] },
   { key: 'score',      label: '绩效分',   modes: ['detail', 'edit'] },
-  { key: 'email',      label: '邮箱',     modes: ['detail', 'add', 'edit'] },
-  { key: 'phone',      label: '手机号',   modes: ['detail', 'add', 'edit'] },
-  { key: 'address',    label: '地址',     modes: ['detail', 'add', 'edit'] }
+  { key: 'attendance', label: '考勤分',   modes: ['detail', 'edit'] }
 ]
 
-// 部门小组映射（弹窗下拉联动） 
+// 单位-部门映射
+var DEPTS = {
+  '总部':     ['技术部', '产品部'],
+  '上海分部': ['市场部'],
+  '广州分部': ['销售部']
+}
+
+// 部门-小组映射
 var GROUPS = {
   '技术部': ['前端组', '后端组', '运维组'],
   '市场部': ['推广组', '调研组'],
@@ -22,32 +35,46 @@ var GROUPS = {
 
 // 分析维度  
 var DIM_OPTS = [
-  { label: '部门', value: 'department' }, { label: '状态', value: 'status' },
-  { label: '角色', value: 'role' },       { label: '年份', value: 'year' }
+  { label: '年度', value: 'year' },
+  { label: '单位', value: 'company' },
+  { label: '人员', value: 'role' },
+  { label: '指标', value: 'level' }
 ]
 
 // 维度钻取链  
 var DP_MAP = {
-  department: ['department', 'group', 'name'],
-  status: ['status', 'department', 'group', 'name'],
-  role: ['role', 'department', 'group', 'name'],
-  year: ['year', 'department', 'group', 'name']
+  year:    ['year', 'company', 'department', 'group', 'name'],
+  company: ['company', 'department', 'group', 'name'],
+  role:    ['role', 'company', 'department', 'group', 'name'],
+  level:   ['level', 'company', 'department', 'group', 'name']
 }
 
 // 不支持维度切换的图表类型
-var DNS = ['heatmap', 'wordcloud', 'sankey', 'boxplot', 'nestedpie']
+var DNS = [ 'wordcloud', 'sankey', 'boxplot', 'nestedpie', 'funnel']
 // 支持指标切换的图表类型
 var MYS = ['pie', 'rose', 'funnel']
+// ---- 指标等级 ----
+var LEVEL_ORDER = ['待评估', '不合格', '合格', '良好', '优秀']
+function getLevel(score) {
+  var s = Number(score) || 0
+  if (s === 0) return '待评估'
+  if (s < 60) return '不合格'
+  if (s < 80) return '合格'
+  if (s < 90) return '良好'
+  return '优秀'
+}
 
 // 表格列配置  
 var TABLECOLS = [
-  { label: '部门', prop: 'department', width: 100 },
-  { label: '小组', prop: 'group', width: 100 },
-  { label: '角色', prop: 'role', width: 100 },
-  { label: '姓名', prop: 'name', width: 100 },
-  { label: '邮箱', prop: 'email' }
+  { label: '单位',   prop: 'company', width: 90 },
+  { label: '部门',   prop: 'department', width: 80 },
+  { label: '小组',   prop: 'group', width: 80 },
+  { label: '角色',   prop: 'role', width: 70 },
+  { label: '姓名',   prop: 'name', width: 80 },
+  { label: '学历',   prop: 'education', width: 70 },
+  { label: '邮箱',   prop: 'email' }
 ]
 
-export  {
-  FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, TABLECOLS
+export {
+  FIELDS, DEPTS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, LEVEL_ORDER, getLevel, TABLECOLS 
 }

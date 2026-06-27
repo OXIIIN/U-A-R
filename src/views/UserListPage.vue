@@ -33,7 +33,9 @@
         <span style="margin-left:40px;">显示指标：</span>
         <el-radio-group v-model="currentMetric" size="small">
           <el-radio-button label="count">人数</el-radio-button>
-          <el-radio-button label="avg">平均分</el-radio-button>
+          <el-radio-button label="avg">绩效分</el-radio-button>
+          <el-radio-button label="avg_attendance">考勤分</el-radio-button>
+          <el-radio-button label="edu" v-show="chartType==='funnel'">学历</el-radio-button>
         </el-radio-group>
       </template>
       <!-- 图表类型选择 -->
@@ -64,7 +66,7 @@
             <div class="kpi-metric"> 平均分 </div>
           </div>
         </div>
-        <div v-else id="mainChart" style="width:100%;height:350px;"></div>
+        <div v-else id="mainChart" style="width:100%;height:500px;"></div>
       </div>
     </div>
     <!-- 搜索框 -->
@@ -120,11 +122,12 @@
 </template>
 
 <script>
-import { FIELDS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, TABLECOLS } from '../utils/userListUtils'
+import { FIELDS, DEPTS, GROUPS, DIM_OPTS, DP_MAP, DNS, MYS, TABLECOLS, getLevel, LEVEL_ORDER } from '../utils/userListUtils'
 import { getChartOption, CG } from '../utils/chartUtils'
 import { exportCSV } from '../utils/exportUtils'
 import * as echarts from 'echarts'
 import 'echarts-wordcloud'
+
 
 export default {
   name: 'UserListPage',
@@ -134,7 +137,7 @@ export default {
     // 用户数据
     users: [], selectedIds: [], statsCards: [], drillPath: [],
     // 图表
-    mainChart: null, currentDim: 'department', currentMetric: 'count', chartType: 'bar',kpiData: null,
+    mainChart: null, currentDim: 'year', currentMetric: 'count', chartType: 'kpi',kpiData: null,
     // 搜索与分页
     search: '', currentPage: 1, pageSize: 5,
     // 弹窗
@@ -145,12 +148,24 @@ export default {
   }},
 
   computed: {
-    filteredUsers: function () {// 过滤后的用户
-      var result = this.users
-      var dp = this.drillPath// 例 dp = [{dim:'department', value:'技术部'}, {dim:'group', value:'前端组'}]
+    // filteredUsers: function () {// 过滤后的用户
+    //   var result = this.users
+    //   var dp = this.drillPath// 例 dp = [{dim:'department', value:'技术部'}, {dim:'group', value:'前端组'}]
+    //   if (dp.length) {
+    //     dp.forEach(function (step) {// 通过钻取目录逐级钻取用户
+    //       result = result.filter(function (u) {return String(u[step.dim]) === step.value})
+    //     })
+    //   }
+    //   return result
+    // },
+    filteredUsers: function () {// 钻取过滤
+      var self = this, result = self.users
+      var dp = self.drillPath
       if (dp.length) {
-        dp.forEach(function (step) {// 通过钻取目录逐级钻取用户
-          result = result.filter(function (u) {return String(u[step.dim]) === step.value})
+        dp.forEach(function (step) {
+          result = result.filter(function (u) {
+            return (step.dim === 'level' ? getLevel(u.score) : String(u[step.dim] || '')) === step.value
+          })
         })
       }
       return result
@@ -189,15 +204,25 @@ export default {
      this.renderChart() 
     },
     chartType: function () {// 当前图表类型改变时，基于图表类型重新渲染图表
+      if (this.chartType !== 'funnel' && this.currentMetric === 'edu') this.currentMetric = 'count'
       this.renderChart()
     }
   },
 
   mounted: function () {
-    var self = this
-    self.loadUsers()
-    self.$nextTick(function () { self.initChart() })
-  },
+  var self = this
+  fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
+    .then(function (res) { return res.json() })
+    .then(function (json) {
+      echarts.registerMap('china', json)
+      self.loadUsers()
+      self.$nextTick(function () { self.initChart() })
+    })
+    .catch(function () {
+      self.loadUsers()
+      self.$nextTick(function () { self.initChart() })
+    })
+},
   beforeDestroy: function () {                       
     if (this.mainChart) {
       this.mainChart.dispose()// 销毁图表实例，释放内存
@@ -246,30 +271,54 @@ export default {
       return chain[Math.min(this.drillPath.length, chain.length - 1)]
     },
     onChartClick: function (params) {// 图表点击后触发下钻
+      if (this.chartType === 'heatmap'  || this.chartType === 'funnel') return // 热力，漏斗不支持钻取
       var chain = DP_MAP[this.currentDim]
       if (this.drillPath.length >= chain.length - 1 || !params.name) { return }
       this.drillPath.push({ dim: this.getDrillKey(), value: params.name })
       this.renderChart()
     },
-    getDrillUsers: function () {// 获取当前钻取层级的用户
+    // getDrillUsers: function () {// 获取当前钻取层级的用户
+    //   var users = this.users
+    //   this.drillPath.forEach(function (step) {
+    //     users = users.filter(function (u) { return String(u[step.dim]) === step.value })
+    //   })
+    //   return users
+    // },
+    getDrillUsers: function () {
       var users = this.users
       this.drillPath.forEach(function (step) {
-        users = users.filter(function (u) { return String(u[step.dim]) === step.value })
+        users = users.filter(function (u) {
+          return (step.dim === 'level' ? getLevel(u.score) : String(u[step.dim] || '')) === step.value
+        })
       })
       return users
     },
-    getData: function (users,dim) {// 获取当前钻取层级的数据(例 grouped = {技术部:6, 市场部:5, 销售部:4, 产品部:5})
+    // getData: function (users,dim) {// 获取当前钻取层级的数据(例 grouped = {技术部:6, 市场部:5, 销售部:4, 产品部:5})
+    //   var grouped = {}
+    //   users.forEach(function (u) {
+    //     var d = String(u[dim] || '未知')
+    //     grouped[d] = (grouped[d] || 0) + 1
+    //   })
+    //   return grouped
+    // },
+    getData: function (users, dim) {
       var grouped = {}
       users.forEach(function (u) {
-        var d = String(u[dim] || '未知')
+        var d = dim === 'level' ? getLevel(u.score) : String(u[dim] || '未知')
         grouped[d] = (grouped[d] || 0) + 1
       })
+      if (dim === 'level') {
+        var ordered = {}
+        LEVEL_ORDER.forEach(function (l) { if (grouped[l] !== undefined) ordered[l] = grouped[l] })
+        return ordered
+      }
       return grouped
     },
     buildOption: function () {// 配置分发器
       var users = this.getDrillUsers()
       var dim = this.drillPath.length ? this.getDrillKey() : this.currentDim
-      var data = this.getData(users,dim)
+      if (this.chartType === 'funnel') dim = 'level' // 漏斗强制锁定
+      var data = this.getData(users, dim)
       var cats = Object.keys(data), vals = Object.values(data)
       return getChartOption(this.chartType, cats, vals, users, dim, this.currentMetric)
     },
@@ -331,13 +380,15 @@ export default {
       this.popupMode = mode
       this.dialogVisible = true
       if (mode === 'add') {// 添加用户
-        this.popupData = { status: '未激活', department: '', role: '用户', name: '', year: '2024', email: '', phone: '', address: '' }
+        this.popupData = { status: '未激活', department: '', role: '用户', name: '', year: '2024', email: '', phone: '', address: '绵阳市' }
       } else {
         this.popupData = Object.assign({}, user)
       }
     },
-     getOptions: function (f) {// 获取下拉框选项
-      if (f.key === 'group') { return GROUPS[this.popupData.department] || [] }// 各部门的小组选项
+    getOptions: function (f) {// 获取下拉框选项
+      if (f.key === 'company')    return f.options
+      if (f.key === 'department') return DEPTS[this.popupData.company] || []
+      if (f.key === 'group')      return GROUPS[this.popupData.department] || []
       return f.options
     },
     savePopup: function () {// 保存弹窗数据
