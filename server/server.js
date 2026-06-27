@@ -3,7 +3,7 @@ const cors = require('cors')
 const fetch = require('node-fetch')
 const dbModule = require('./db')
 const express = require('express')
-const { buildReportSQL } = require('../src/utils/reportUtils') // [改动] 直接引用，不再重复定义
+const { buildReportSQL } = require('../src/utils/reportUtils') 
 
 const app = express()
 app.use(cors())
@@ -114,31 +114,6 @@ app.post('/api/query', (req, res) => {
   }
 })
 
-// ----报表聚合查询（复用 reportUtils 的 buildReportSQL）----
-app.post('/api/report', (req, res) => {
-  try {
-    const { dims, selectedGroups } = req.body
-    if (!dims || !dims.length) {
-      return res.json({ success: false, error: '请至少选择一个统计维度' })
-    }
-    const allowed = ['year', 'company', 'project']
-    for (let i = 0; i < dims.length; i++) {
-      if (allowed.indexOf(dims[i]) === -1) {
-        return res.json({ success: false, error: '非法维度字段：' + dims[i] })
-      }
-    }
-    const sql = buildReportSQL(dims, selectedGroups || [])
-    if (!sql) {
-      return res.json({ success: false, error: 'SQL 构建失败' })
-    }
-    console.log('报表SQL：', sql)
-    const rows = dbModule.queryAll(sql)
-    res.json({ success: true, data: rows, sql: sql })
-  } catch (e) {
-    res.json({ success: false, error: e.message })
-  }
-})
-
 // 查询用户列表（支持搜索）
 app.get('/api/users', (req, res) => {
   const search = req.query.search || ''
@@ -191,6 +166,25 @@ app.post('/api/users/batch-delete', (req, res) => {
   const placeholders = ids.map(() => '?').join(',')
   const result = dbModule.run(`DELETE FROM users WHERE id IN (${placeholders})`, ids)
   res.json({ success: true, deleted: result.changes })
+})
+
+// ----报表聚合查询----
+app.post('/api/report', (req, res) => {
+  try {
+    const { dims, selectedGroups } = req.body
+    // const allowed = ['year', 'company', 'project']// 安全校验——防止前端传入非法字段名
+    // for (let i = 0; i < dims.length; i++) {
+    //   if (allowed.indexOf(dims[i]) === -1) {
+    //     return res.json({ success: false, error: '非法维度字段：' + dims[i] })
+    //   }
+    // }
+    const sql = buildReportSQL(dims, selectedGroups || [])
+    console.log('报表SQL：', sql)
+    const rows = dbModule.queryAll(sql)
+    res.json({ success: true, data: rows, sql: sql })
+  } catch (e) {
+    res.json({ success: false, error: e.message })
+  }
 })
 
 // ----启动服务器----

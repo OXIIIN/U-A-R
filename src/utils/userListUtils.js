@@ -1,3 +1,4 @@
+
 // 用户字段配置（弹窗表单） 
 var FIELDS = [
   { key: 'status',     label: '状态',     modes: ['detail', 'edit'],        options: ['活跃', '未激活', '已封禁'] },
@@ -20,7 +21,7 @@ var FIELDS = [
 
 // 单位-部门映射
 var DEPTS = {
-  '总部':     ['技术部', '产品部'],
+  '总部':    ['技术部', '产品部'],
   '上海分部': ['市场部'],
   '广州分部': ['销售部']
 }
@@ -66,13 +67,15 @@ function getLevel(score) {
 
 // 表格列配置  
 var TABLECOLS = [
-  { label: '单位',   prop: 'company', width: 90 },
-  { label: '部门',   prop: 'department', width: 80 },
-  { label: '小组',   prop: 'group', width: 80 },
+  { label: '单位',   prop: 'company', width: 100 },
+  { label: '部门',   prop: 'department', width: 100 },
+  { label: '小组',   prop: 'group', width: 100 },
   { label: '角色',   prop: 'role', width: 70 },
-  { label: '姓名',   prop: 'name', width: 80 },
+  { label: '姓名',   prop: 'name', width: 70 },
+  { label: '年龄',   prop: 'age', width: 70 },
   { label: '学历',   prop: 'education', width: 70 },
-  { label: '邮箱',   prop: 'email' }
+  { label: '邮箱',   prop: 'email', width: 200},
+  { label: '电话',   prop: 'phone' }
 ]
 
 export {

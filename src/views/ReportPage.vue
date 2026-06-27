@@ -214,7 +214,7 @@ export default {
       users: [],
       reportRows: [],
       dimOptions: DIM_OPTIONS,
-      selectedDims: ['company', 'year', 'project'],
+      selectedDims: ['company'],
       groupColumns: GROUP_COLUMNS,
       allHeaderGroups: HEADER_GROUPS,
       selectedHeaderGroups: DEFAULT_GROUPS.slice(),
@@ -273,7 +273,7 @@ export default {
         .catch(function (e) { self.$message.error('用户数据加载失败：' + e.message) })
     },
 
-    loadReportData: function () {
+    loadReportData: function () {// 获取报表数据
       var self = this
       fetch('http://localhost:3001/api/report', {
         method: 'POST',
@@ -499,7 +499,7 @@ export default {
 </script>
 
 <style scoped>
-.report-page { width: 1200px; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
+.report-page { width: 1500px; zoom: 0.8; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #2a2a4a; margin-bottom: 24px; }
 .top-bar h1 { color: #e2e2e2; font-size: 24px; margin: 0; }
 .top-bar span { color: #999; font-size: 13px; }

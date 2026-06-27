@@ -137,7 +137,7 @@ export default {
     // 用户数据
     users: [], selectedIds: [], statsCards: [], drillPath: [],
     // 图表
-    mainChart: null, currentDim: 'year', currentMetric: 'count', chartType: 'kpi',kpiData: null,
+    mainChart: null, currentDim: 'year', currentMetric: 'count', chartType: 'heatmap', kpiData: null,
     // 搜索与分页
     search: '', currentPage: 1, pageSize: 5,
     // 弹窗
@@ -447,7 +447,7 @@ export default {
 
 <style scoped>
 /* 页面整体 */
-.main-page { width: 1100px; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
+.main-page { width: 1500px; zoom: 0.8; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
 /* 顶部栏 */
 .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #2a2a4a; margin-bottom: 24px; }
 .top-bar h1 { color: #e2e2e2; font-size: 24px; margin: 0; }
