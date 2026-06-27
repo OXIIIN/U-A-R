@@ -1,11 +1,13 @@
 // ----导入依赖----
 const cors = require('cors')
 const fetch = require('node-fetch')
-const dbModule = require('./db')// 导入数据库模块
+const dbModule = require('./db')
 const express = require('express')
+const { buildReportSQL } = require('../src/utils/reportUtils') // [改动] 直接引用，不再重复定义
+
 const app = express()
 app.use(cors())
-app.use(express.json())// // 注册 JSON 解析中间件，自动把请求体中的 JSON 字符串转为 JS 对象
+app.use(express.json())
 
 const API_KEY = process.env.DASHSCOPE_API_KEY
 console.log('API Key:', API_KEY ?
@@ -59,11 +61,11 @@ ${SCHEMA}`
 // ----AI 分析-----
 app.post('/api/ask', async (req, res) => {
   const question = req.body.question
-  if (!question || !question.trim()) {// 空输入防御
+  if (!question || !question.trim()) {
     return res.json({ success: false, error: '请输入问题' })
   }
-  try {// 调用大模型API
-    const resp = await fetch(// await 是"等待异步操作完成"。大模型需要几秒钟思考，await 让代码停在这里等结果回来，再执行下一行
+  try {
+    const resp = await fetch(
       'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       {
         method: 'POST',
@@ -81,27 +83,24 @@ app.post('/api/ask', async (req, res) => {
         })
       }
     )
-    const data = await resp.json()// 解析大模型的响应
+    const data = await resp.json()
     console.log('API 响应：', JSON.stringify(data, null, 2))
-    // 错误检查
     if (data.error) {
       return res.json({ success: false, error: data.error.message || JSON.stringify(data.error) })
     }
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return res.json({ success: false, error: 'API返回格式异常：' + JSON.stringify(data) })
     }
-    // 处理数据
-    const content = data.choices[0].message.content// 提取
+    const content = data.choices[0].message.content
     console.log('大模型原始返回：', content)
-    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()// 清理markdown标记
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     const result = JSON.parse(jsonStr)
-
     res.json({ success: true, data: result })
-  }
-  catch (e) {
+  } catch (e) {
     res.json({ success: false, error: e.message })
   }
 })
+
 // 执行SQL
 app.post('/api/query', (req, res) => {
   try {
@@ -109,11 +108,37 @@ app.post('/api/query', (req, res) => {
     if (!sql || !sql.trim().toUpperCase().startsWith('SELECT')) {
       return res.json({ success: false, error: '只允许查询操作' })
     }
-    res.json({ success: true, data: dbModule.queryAll(sql) })// 执行sql
+    res.json({ success: true, data: dbModule.queryAll(sql) })
   } catch (e) {
     res.json({ success: false, error: e.message })
   }
 })
+
+// ----报表聚合查询（复用 reportUtils 的 buildReportSQL）----
+app.post('/api/report', (req, res) => {
+  try {
+    const { dims, selectedGroups } = req.body
+    if (!dims || !dims.length) {
+      return res.json({ success: false, error: '请至少选择一个统计维度' })
+    }
+    const allowed = ['year', 'company', 'project']
+    for (let i = 0; i < dims.length; i++) {
+      if (allowed.indexOf(dims[i]) === -1) {
+        return res.json({ success: false, error: '非法维度字段：' + dims[i] })
+      }
+    }
+    const sql = buildReportSQL(dims, selectedGroups || [])
+    if (!sql) {
+      return res.json({ success: false, error: 'SQL 构建失败' })
+    }
+    console.log('报表SQL：', sql)
+    const rows = dbModule.queryAll(sql)
+    res.json({ success: true, data: rows, sql: sql })
+  } catch (e) {
+    res.json({ success: false, error: e.message })
+  }
+})
+
 // 查询用户列表（支持搜索）
 app.get('/api/users', (req, res) => {
   const search = req.query.search || ''
@@ -126,12 +151,13 @@ app.get('/api/users', (req, res) => {
     ]
     const sql = 'SELECT * FROM users WHERE ' + fields.map(f => f + ' LIKE ?').join(' OR ')
     const params = fields.map(() => '%' + search + '%')
-    users = dbModule.queryAll(sql + ' ORDER BY id DESC', params)// 返回搜索过滤后的数据
+    users = dbModule.queryAll(sql + ' ORDER BY id DESC', params)
   } else {
-    users = dbModule.queryAll('SELECT * FROM users ORDER BY id DESC')// 返回所有用户数据（按 id 降序，最新的排最前
+    users = dbModule.queryAll('SELECT * FROM users ORDER BY id DESC')
   }
   res.json({ success: true, data: users })
 })
+
 // 新增用户
 app.post('/api/users', (req, res) => {
   const u = req.body
@@ -142,6 +168,7 @@ app.post('/api/users', (req, res) => {
   if (result.changes === 0) return res.json({ success: false, error: '新增失败' })
   res.json({ success: true, id: result.lastInsertRowid })
 })
+
 // 编辑用户
 app.put('/api/users/:id', (req, res) => {
   const u = req.body
@@ -151,9 +178,10 @@ app.put('/api/users/:id', (req, res) => {
   )
   res.json({ success: true })
 })
+
 // 删除用户
 app.delete('/api/users/:id', (req, res) => {
-  dbModule.run('DELETE FROM users WHERE id=?', [Number(req.params.id)])// 删除指定id用户
+  dbModule.run('DELETE FROM users WHERE id=?', [Number(req.params.id)])
   res.json({ success: true })
 })
 
@@ -165,15 +193,7 @@ app.post('/api/users/batch-delete', (req, res) => {
   res.json({ success: true, deleted: result.changes })
 })
 
-// 批量修改状态（可拓展为批量编辑）
-// app.post('/api/users/batch-status', (req, res) => {
-//   const ids = req.body.ids
-//   const status = req.body.status
-//   ids.forEach(id => { dbModule.run('UPDATE users SET status=? WHERE id=?', [status, id]) })// 逐个修改指定id用户的状态
-//   res.json({ success: true })
-// })
-
-// ----启动服务器（改为先初始化数据库再启动）----
+// ----启动服务器----
 dbModule.initDB(() => {
   app.listen(3001, function () {
     console.log('AI 分析服务已启动，端口 3001')
