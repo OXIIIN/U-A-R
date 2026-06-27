@@ -56,7 +56,7 @@ var MET_LABELS = {
   avg_attendance: '平均考勤分', score: '绩效分', attendance: '考勤分'
 }
 
-// ---- SQL 列表达式映射 ----
+// ---- SQL列表达式映射 ----
 var GROUP_SQL = {
   scoreStats: [// 绩效分统计
     'ROUND(AVG(score),1) as score_avg',
