@@ -60,7 +60,10 @@ async function exportPDF(element, fileName, paperSize, orientation) {
     scale: 2, backgroundColor: '#fff',
     onclone: function (doc) {// 克隆整个 DOM 到内存中
       var el = doc.querySelector('[data-pdf="' + tid + '"]')
-      if (el) { var s = doc.createElement('style'); s.textContent = PDF_CSS; doc.head.appendChild(s); el.classList.add('pdf-exporting') }
+      if (el) {
+        el.style.zoom = '1'
+        var s = doc.createElement('style');
+        s.textContent = PDF_CSS; doc.head.appendChild(s); el.classList.add('pdf-exporting') }
     }
   })
   element.removeAttribute('data-pdf')

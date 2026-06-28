@@ -83,7 +83,7 @@ app.post('/api/ask', async (req, res) => {
         })
       }
     )
-    const data = await resp.json()
+    const data = await resp.json()// 解析响应
     console.log('API 响应：', JSON.stringify(data, null, 2))
     if (data.error) {
       return res.json({ success: false, error: data.error.message || JSON.stringify(data.error) })
@@ -91,7 +91,7 @@ app.post('/api/ask', async (req, res) => {
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return res.json({ success: false, error: 'API返回格式异常：' + JSON.stringify(data) })
     }
-    const content = data.choices[0].message.content
+    const content = data.choices[0].message.content// 提取并解析大模型的回答
     console.log('大模型原始返回：', content)
     const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     const result = JSON.parse(jsonStr)
@@ -172,12 +172,6 @@ app.post('/api/users/batch-delete', (req, res) => {
 app.post('/api/report', (req, res) => {
   try {
     const { dims, selectedGroups } = req.body
-    // const allowed = ['year', 'company', 'project']// 安全校验——防止前端传入非法字段名
-    // for (let i = 0; i < dims.length; i++) {
-    //   if (allowed.indexOf(dims[i]) === -1) {
-    //     return res.json({ success: false, error: '非法维度字段：' + dims[i] })
-    //   }
-    // }
     const sql = buildReportSQL(dims, selectedGroups || [])
     console.log('报表SQL：', sql)
     const rows = dbModule.queryAll(sql)
