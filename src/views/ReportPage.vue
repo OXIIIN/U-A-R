@@ -80,7 +80,7 @@
               @dblclick="isEdit && startEdit('group', gc.key, $event)">{{ getLabel(gc.key) }}</span>
           </template>
         </el-table-column>
-        // 三层表头渲染
+        <!-- 三层表头渲染 -->
         <template v-for="group in visibleCols">// 第一层
           <el-table-column :key="'grp_'+group.key" align="center">
             <template slot="header">
@@ -245,14 +245,14 @@ export default {
     // ---- 获取数据库中的数据 ----
     loadUsers: function () {//加载用户数据
       var self = this
-      fetch('http://localhost:3001/api/users')
+      fetch('/api/users')
         .then(function (res) { return res.json() })
         .then(function (json) { if (json.success) { self.users = json.data } })
         .catch(function (e) { self.$message.error('用户数据加载失败：' + e.message) })
     },
     loadReportData: function () {// 获取报表数据
       var self = this
-      fetch('http://localhost:3001/api/report', {
+      fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dims: self.selectedDims, selectedGroups: self.selectedCols })
@@ -310,6 +310,8 @@ export default {
       var style = document.createElement('style')
       style.id = 'print-dynamic-style'
       style.textContent = '@page{size:' + ps.paperSize + ' ' + ps.orientation + ';margin:' + margin + '}'
+      var old = document.getElementById('print-dynamic-style')
+      if (old) old.remove()// 追加前先清理旧元素
       document.head.appendChild(style)
       window.onafterprint = function () {// 注册打印完成后的清理函数
         var el = document.getElementById('print-dynamic-style')
@@ -324,7 +326,7 @@ export default {
       var self = this
       self.aiLoading = true; self.aiResult = null; self.aiSqlRows = null
       try {// 发送问题给后端
-        var res1 = await fetch('http://localhost:3001/api/ask', {
+        var res1 = await fetch('/api/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: self.aiQuestion })
@@ -334,7 +336,7 @@ export default {
         if (!json.success) { self.$message.error(json.error); return }
         if (!json.data || !json.data.sql) return
         self.aiResult = json.data
-        var res2 = await fetch('http://localhost:3001/api/query', {// 发送sql语句给后端执行
+        var res2 = await fetch('/api/query', {// 发送sql语句给后端执行
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sql: json.data.sql })

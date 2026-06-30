@@ -102,11 +102,8 @@ var GROUP_SQL = {
 }
 // SQL构建器
 function buildReportSQL(dims, selectedGroups) {
-  var dimCols = dims.map(function (dim) {// 处理SQL保留字
-    return dim === 'group' ? '"group"' : dim
-  })
-  var groupByParts = dimCols.concat(['department', '"group"', 'role'])
-  var selectParts = dimCols.concat(['department', '"group" as grp', 'role'])
+  var groupByParts = dims.concat(['department', '"group"', 'role'])// 分组依据
+  var selectParts = dims.concat(['department', '"group" as grp', 'role'])// 获取其中的所有数据
   selectParts.push('COUNT(*) as count')
 
   selectedGroups.forEach(function (sg) {// 拼接sql表达式
@@ -117,7 +114,7 @@ function buildReportSQL(dims, selectedGroups) {
 
   var orderParts = dims.map(function (dim) {// 控制结果排序
     if (dim === 'company') {
-      return "CASE company WHEN '总部' THEN 1 WHEN '上海分部' THEN 2 WHEN '广州分部' THEN 3 ELSE 4 END"
+      return "CASE company WHEN '成都总部' THEN 1 WHEN '重庆分部' THEN 2 WHEN '绵阳分部' THEN 3 WHEN '上海分部' THEN 4 WHEN '广州分部' THEN 5 ELSE 6 END"
     }
     return dim === 'group' ? '"group"' : dim
   }).concat(['department', '"group"', 'role'])

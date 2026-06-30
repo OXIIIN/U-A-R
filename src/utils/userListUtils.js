@@ -1,29 +1,31 @@
 
 // 用户字段配置（弹窗表单） 
 var FIELDS = [
-  { key: 'status',     label: '状态',     modes: ['detail', 'edit'],        options: ['活跃', '未激活', '已封禁'] },
-  { key: 'company',    label: '单位',     modes: ['detail', 'edit', 'add'], options: ['总部', '上海分部', '广州分部'] },
-  { key: 'department', label: '部门',     modes: ['detail', 'edit', 'add'], options: [] },
-  { key: 'group',      label: '小组',     modes: ['detail', 'edit'],        options: [] },
-  { key: 'role',       label: '角色',     modes: ['detail', 'edit', 'add'], options: ['部长', '组长', '员工'] },
-  { key: 'name',       label: '姓名',     modes: ['detail', 'edit', 'add'] },
-  { key: 'age',        label: '年龄',     modes: ['detail', 'edit', 'add'] },
-  { key: 'education',  label: '学历',     modes: ['detail', 'edit', 'add'], options: ['大专', '本科', '硕士', '博士'] },
-  { key: 'email',      label: '邮箱',     modes: ['detail', 'edit', 'add'] },
-  { key: 'phone',      label: '手机号',   modes: ['detail', 'edit', 'add'] },
-  { key: 'address',    label: '地址',     modes: ['detail', 'edit', 'add'] },
-  { key: 'project',    label: '项目',     modes: ['detail', 'edit'], options: ['项目A', '项目B', '项目C', '项目D', '未分配'] },
-  { key: 'year',       label: '年度',     modes: ['detail', 'edit'], options: ['2022', '2023', '2024'] },
-  { key: 'quarter',    label: '季度',     modes: ['detail', 'edit'], options: ['Q1', 'Q2', 'Q3', 'Q4'] },
-  { key: 'score',      label: '绩效分',   modes: ['detail', 'edit'] },
-  { key: 'attendance', label: '考勤分',   modes: ['detail', 'edit'] }
+  { key: 'status',     label: '状态',     modes: ['edit', 'detail'],         options: ['活跃', '未激活', '已封禁'] },
+  { key: 'company',    label: '单位',     modes: ['edit', 'detail', 'add'], options: ['总部', '重庆分部', '绵阳分部', '上海分部', '广州分部'] },
+  { key: 'department', label: '部门',     modes: ['edit', 'detail'], options: [] },
+  { key: 'group',      label: '小组',     modes: ['edit', 'detail'],        options: [] },
+  { key: 'role',       label: '角色',     modes: ['edit', 'detail', 'add'], options: ['部长', '组长', '员工'] },
+  { key: 'name',       label: '姓名',     modes: ['edit', 'detail', 'add'] },
+  { key: 'age',        label: '年龄',     modes: ['edit', 'detail', 'add'] },
+  { key: 'education',  label: '学历',     modes: ['edit', 'detail', 'add'], options: ['大专', '本科', '硕士', '博士'] },
+  { key: 'email',      label: '邮箱',     modes: ['edit', 'detail', 'add'] },
+  { key: 'phone',      label: '手机号',   modes: ['edit', 'detail', 'add'] },
+  { key: 'address',    label: '地址',     modes: ['edit', 'detail', 'add'] },
+  { key: 'project',    label: '项目',     modes: ['edit', 'detail'], options: ['项目A', '项目B', '项目C', '项目D', '未分配'] },
+  { key: 'year',       label: '年度',     modes: ['edit', 'detail'], options: ['2020', '2021', '2022', '2023', '2024'] },
+  { key: 'quarter',    label: '季度',     modes: ['edit', 'detail'], options: ['Q1', 'Q2', 'Q3', 'Q4'] },
+  { key: 'score',      label: '绩效分',   modes: ['edit', 'detail'] },
+  { key: 'attendance', label: '考勤分',   modes: ['edit', 'detail'] }
 ]
 
 // 单位-部门映射
 var DEPTS = {
   '总部':    ['技术部', '产品部'],
+  '重庆分部': ['运营部', '客服部'],
+  '绵阳分部': ['研发部'],
   '上海分部': ['市场部'],
-  '广州分部': ['销售部']
+  '广州分部': ['销售部'] 
 }
 
 // 部门-小组映射
@@ -31,7 +33,10 @@ var GROUPS = {
   '技术部': ['前端组', '后端组', '运维组'],
   '市场部': ['推广组', '调研组'],
   '销售部': ['演示组', '渠道组'],
-  '产品部': ['产品组', '设计组']
+  '产品部': ['产品组', '设计组'],
+  '研发部': ['移动组', '平台组'],
+  '运营部': ['策划组', '执行组'],
+  '客服部': ['售前组', '售后组']
 }
 
 // 分析维度  

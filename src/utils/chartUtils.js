@@ -57,9 +57,9 @@ function kpiOpt(cats, vals, users, dim) {
 // 热力区域图
 var CITY_GEO = {// 建立城市名 → 经纬度的映射表
   '成都': [104.06, 30.67], '上海': [121.48, 31.22], '广州': [113.23, 23.16],
-  '绵阳': [104.73, 31.47], 
+  '绵阳': [104.73, 31.47], '重庆': [106.54, 29.59],
   // '杭州': [120.19, 30.26],  '南京': [118.78, 32.04],
-  // '北京': [116.46, 39.92], '天津': [117.20, 39.13],  '重庆': [106.54, 29.59],
+  // '北京': [116.46, 39.92], '天津': [117.20, 39.13],  
   // '苏州': [120.62, 31.32], '深圳': [114.07, 22.62],  '武汉': [114.31, 30.52],
   // '长沙': [112.98, 28.19],  '西安': [108.95, 34.27], '郑州': [113.65, 34.76],  '济南': [117.00, 36.65],
   // '青岛': [120.33, 36.07],  '大连': [121.62, 38.92], '昆明': [102.73, 25.04]
@@ -109,7 +109,7 @@ function heatmapOpt(users, dim) {// 热力区域图
       emphasis: { label: { show: true, color: '#e2e2e2', fontSize: 11 }, itemStyle: { areaColor: '#1a2745' } }
     },
     series: [
-      { type: 'heatmap', coordinateSystem: 'geo', data: data, pointSize: 20, blurSize: 30},
+      { type: 'heatmap', coordinateSystem: 'geo', data: data, pointSize: 20, blurSize: 34},
       { type: 'scatter', coordinateSystem: 'geo', data: data, symbolSize: 12,
         label: { show: true, formatter: function (p) { return p.data.name }, position: 'right', color: '#e2e2e2', fontSize: 10 },
         itemStyle: { color: '#e94560', borderColor: 'rgba(255,255,255,0.3)', borderWidth: 2 } }
@@ -142,7 +142,7 @@ function barOpt(type,cats,vals,users,dim){
     S=[{name:'偏离均值',type:'bar',
       data:avgD(cats,users,dim).map(function(d){
         var v=+(d.value-avg).toFixed(1);
-        return{name:d.name,value:v,barWidth:'40%',itemStyle:{color:v>=0?'#4ecb71':'#e94560'}}}),
+        return{name:d.name,value:v,itemStyle:{color:v>=0?'#4ecb71':'#e94560'}}}),
       label:{show:true,position:'top',color:'#e2e2e2',formatter:function(p){return(p.value>=0?'+':'')+p.value}}}]
   }
   return stdOpt(cats,S,type!=='bar','axis')
@@ -209,22 +209,56 @@ function lineOpt(type,cats,vals,users,dim){
   }
   return stdOpt(cats,S,type!=='line')
 }
-function radarOpt(cats,vals){// 折线雷达图
-  var max=Math.max.apply(null,vals.concat([1]))
-  return{
-    tooltip:{},
-    radar:{
-      indicator:cats.map(function(c){return{name:c,max:max+1}}), shape:'polygon',
-      splitArea:{areaStyle:{color:['#16213e','#1a2745']}},splitLine:{lineStyle:{color:'#2a2a4a'}},
-      axisName:{color:'#999'},axisLine:{lineStyle:{color:'#2a2a4a'}}
+// function radarOpt(cats,vals){// 折线雷达图
+//   var max=Math.max.apply(null,vals.concat([1]))
+//   return{
+//     tooltip:{},
+//     radar:{
+//       indicator:cats.map(function(c){return{name:c,max:max+1}}), shape:'polygon',
+//       splitArea:{areaStyle:{color:['#16213e','#1a2745']}},splitLine:{lineStyle:{color:'#2a2a4a'}},
+//       axisName:{color:'#999'},axisLine:{lineStyle:{color:'#2a2a4a'}}
+//     },
+//     series:[{
+//       type:'radar',
+//       data:[{value:vals,name:'人数',
+//         areaStyle:{color:'rgba(56,189,248,0.3)'},
+//         lineStyle:{color:'#38bdf8',width:1},
+//         itemStyle:{color:'#38bdf8',borderWidth:0}}]
+//       }]}
+// }
+// 折线雷达图
+function radarOpt(cats, vals, users, dim) {
+  var catMetrics = cats.map(function (cat) {// 提取所有分类
+    var grp = users.filter(function (u) {
+      return dim === 'level' ? getLevel(u.score) === cat : dimVal(u, dim) === cat
+    })
+    var n = grp.length || 1
+    return {
+      count: grp.length,// 该分类人数
+      avgScore: +(grp.reduce(function (a, u) { return a + Number(u.score || 0) }, 0) / n).toFixed(1),// 该分类平均绩效分
+      avgAtt: +(grp.reduce(function (a, u) { return a + Number(u.attendance || 0) }, 0) / n).toFixed(1)// 该分类平均考勤分
+    }
+  })
+  var maxCount = Math.max.apply(null, catMetrics.map(function (m) { return m.count }).concat([1]))
+  var indicator = cats.map(function (c) { return { name: c, max: 100 } })
+  var seriesData = [
+    { name: '人数占比', value: catMetrics.map(function (m) { return +(m.count / maxCount * 100).toFixed(1) }),
+      lineStyle: { width: 1.5 }, areaStyle: { opacity: 0.15 } },
+    { name: '平均绩效', value: catMetrics.map(function (m) { return m.avgScore }),
+      lineStyle: { width: 1.5 }, areaStyle: { opacity: 0.15 } },
+    { name: '平均考勤', value: catMetrics.map(function (m) { return m.avgAtt }),
+      lineStyle: { width: 1.5 }, areaStyle: { opacity: 0.15 } }
+  ]
+  return {
+    tooltip: { trigger: 'item' }, legend: LEG,
+    radar: {
+      indicator: indicator, shape: 'polygon',
+      splitArea: { areaStyle: { color: ['#16213e', '#1a2745'] } },
+      splitLine: { lineStyle: { color: '#2a2a4a' } },
+      axisName: { color: '#999' }, axisLine: { lineStyle: { color: '#2a2a4a' } }
     },
-    series:[{
-      type:'radar',
-      data:[{value:vals,name:'人数',
-        areaStyle:{color:'rgba(56,189,248,0.3)'},
-        lineStyle:{color:'#38bdf8',width:1},
-        itemStyle:{color:'#38bdf8',borderWidth:0}}]
-      }]}
+    series: [{ type: 'radar', data: seriesData }]
+  }
 }
 // 散点图
 function scatterOpt(type,cats,vals,users,dim){
@@ -404,7 +438,7 @@ function getChartOption(type, cats, vals, users, dim, metric) {
   if (type==='combo') return comboOpt(cats,vals,users,dim)
   // 折线图
   if (['line','multiline','rangearea'].indexOf(type)!==-1) return lineOpt(type,cats,vals,users,dim)
-  if (type==='lineradar') return radarOpt(cats,vals)
+  if (type==='lineradar') return radarOpt(cats, vals, users, dim)
   // 散点图
   if (['scatter','bubble'].indexOf(type)!==-1) return scatterOpt(type,cats,vals,users,dim)
   // 饼图

@@ -1,5 +1,5 @@
 <template>
-  <div class="main-page">
+  <div class="main-page" :style="{ zoom: pageZoom }">
     <!-- 顶部栏 -->
     <div class="top-bar">
       <div>
@@ -30,7 +30,7 @@
       </template>
       <!-- 指标选择 -->
       <template v-if="usesMetric">
-        <span style="margin-left:40px;">显示指标：</span>
+        <span style="margin-left:40px;">分析指标：</span>
         <el-radio-group v-model="currentMetric" size="small">
           <el-radio-button label="count">人数</el-radio-button>
           <el-radio-button label="avg">绩效分</el-radio-button>
@@ -66,7 +66,7 @@
             <div class="kpi-metric"> 平均分 </div>
           </div>
         </div>
-        <div v-else id="mainChart" style="width:100%;height:500px;"></div>
+       <div v-else id="mainChart" :style="{ width:'100%', height:'500px', zoom: 1/pageZoom }"></div>
       </div>
     </div>
     <!-- 搜索框 -->
@@ -99,19 +99,24 @@
     </el-table>
     <!-- 分页 -->
     <div class="pagination-bar">
-      <span>共 {{ filteredUsers.length }} 条，第 {{ currentPage }}/{{ totalPages }} 页</span>
+      <el-button size="mini" :disabled="currentPage<=1" @click="currentPage=1">首页</el-button>
       <el-button size="mini" :disabled="currentPage<=1" @click="currentPage--">上一页</el-button>
+      <span>共 {{ filteredUsers.length }} 条，第 {{ currentPage }}/{{ totalPages }} 页</span>
       <el-button size="mini" :disabled="currentPage>=totalPages" @click="currentPage++">下一页</el-button>
+      <el-button size="mini" :disabled="currentPage>=totalPages" @click="currentPage=totalPages">末页</el-button>
     </div>
     <!-- 弹窗 -->
     <el-dialog :title="popupTitles[popupMode]" :visible.sync="dialogVisible" width="500px">
-      <div v-for="f in visibleFields" :key="f.key" style="margin-bottom:15px;">
-        <div class="popup-label">{{ f.label }}</div>
-        <div v-if="popupMode==='detail'" class="popup-value">{{ popupData[f.key] }}</div>
-        <el-input v-else-if="!f.options" v-model="popupData[f.key]"></el-input>
-        <el-select v-else v-model="popupData[f.key]" style="width:100%;" @change="f.key==='department' && (popupData.group = '')">
-          <el-option v-for="o in getOptions(f)" :key="o" :value="o" :label="o"></el-option>
-        </el-select>
+      <div class="popup-grid">
+        <div v-for="f in visibleFields" :key="f.key" class="popup-item">
+          <div class="popup-label">{{ f.label }}</div>
+          <div v-if="popupMode==='detail'" class="popup-value">{{ popupData[f.key] }}</div>
+          <el-input v-else-if="!f.options" v-model="popupData[f.key]"></el-input>
+          <el-select v-else v-model="popupData[f.key]" style="width:100%;"
+            @change="f.key==='department' && (popupData.group = '')">
+            <el-option v-for="o in getOptions(f)" :key="o" :value="o" :label="o"></el-option>
+          </el-select>
+        </div>
       </div>
       <span slot="footer">
         <el-button v-if="popupMode!=='detail'" type="danger" @click="savePopup">{{ popupMode==='add'?'添加':'保存' }}</el-button>
@@ -133,6 +138,7 @@ export default {
   name: 'UserListPage',
   data: function () {
     return {
+    pageZoom: 0.8, 
     username: localStorage.getItem('username') || 'admin',
     // 用户数据
     users: [], selectedIds: [], statsCards: [], drillPath: [],
@@ -148,16 +154,6 @@ export default {
   }},
 
   computed: {
-    // filteredUsers: function () {// 过滤后的用户
-    //   var result = this.users
-    //   var dp = this.drillPath// 例 dp = [{dim:'department', value:'技术部'}, {dim:'group', value:'前端组'}]
-    //   if (dp.length) {
-    //     dp.forEach(function (step) {// 通过钻取目录逐级钻取用户
-    //       result = result.filter(function (u) {return String(u[step.dim]) === step.value})
-    //     })
-    //   }
-    //   return result
-    // },
     filteredUsers: function () {// 钻取过滤
       var self = this, result = self.users
       var dp = self.drillPath
@@ -205,6 +201,7 @@ export default {
     },
     chartType: function () {// 当前图表类型改变时，基于图表类型重新渲染图表
       if (this.chartType !== 'funnel' && this.currentMetric === 'edu') this.currentMetric = 'count'
+      this.drillPath = [] 
       this.renderChart()
     }
   },
@@ -234,7 +231,7 @@ export default {
   methods: {
     loadUsers: function (search) {// 加载用户数据（支持过滤）
       var self = this
-      var url = 'http://localhost:3001/api/users'
+      var url = '/api/users'
       if (search) url += '?search=' + encodeURIComponent(search)
       fetch(url)
         .then(function (res) { return res.json() })
@@ -271,19 +268,27 @@ export default {
       return chain[Math.min(this.drillPath.length, chain.length - 1)]
     },
     onChartClick: function (params) {// 图表点击后触发下钻
-      if (this.chartType === 'heatmap'  || this.chartType === 'funnel') return // 热力，漏斗不支持钻取
+      if (this.chartType === 'heatmap') {
+        var CITY_COMPANY = {
+          '成都': '成都总部', '绵阳': '绵阳分部', '重庆': '重庆分部',
+          '上海': '上海分部',
+          '广州': '广州分部'
+        }
+        var company = CITY_COMPANY[params.name]
+        if (!company) return
+        this.drillPath = [{ dim: 'company', value: company }]
+        this.currentPage = 1
+        return  // 不调用 renderChart → 图表不变
+      }
+      if (
+        this.chartType === 'heatmap'  || this.chartType === 'funnel'||
+        this.chartType === 'bar' || this.chartType === 'line'
+      ) return // 不支持钻取
       var chain = DP_MAP[this.currentDim]
       if (this.drillPath.length >= chain.length - 1 || !params.name) { return }
       this.drillPath.push({ dim: this.getDrillKey(), value: params.name })
       this.renderChart()
     },
-    // getDrillUsers: function () {// 获取当前钻取层级的用户
-    //   var users = this.users
-    //   this.drillPath.forEach(function (step) {
-    //     users = users.filter(function (u) { return String(u[step.dim]) === step.value })
-    //   })
-    //   return users
-    // },
     getDrillUsers: function () {
       var users = this.users
       this.drillPath.forEach(function (step) {
@@ -293,14 +298,6 @@ export default {
       })
       return users
     },
-    // getData: function (users,dim) {// 获取当前钻取层级的数据(例 grouped = {技术部:6, 市场部:5, 销售部:4, 产品部:5})
-    //   var grouped = {}
-    //   users.forEach(function (u) {
-    //     var d = String(u[dim] || '未知')
-    //     grouped[d] = (grouped[d] || 0) + 1
-    //   })
-    //   return grouped
-    // },
     getData: function (users, dim) {
       var grouped = {}
       users.forEach(function (u) {
@@ -353,7 +350,7 @@ export default {
       this.drillPath = this.drillPath.slice(0, index)
       this.renderChart()
     },
-    // ----批量删除----
+    // ----批量操作----
     onSelect: function (rows) {// 更新selectedIds数组
       this.selectedIds = rows.map(function (r) { return r.id })
     },
@@ -361,15 +358,17 @@ export default {
       var self = this
       self.$confirm('确定删除选中的' + self.selectedIds.length + '个用户？', '提示', { type: 'warning' })
         .then(function () {
-          fetch('http://localhost:3001/api/users/batch-delete', {
+          fetch('/api/users/batch-delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: self.selectedIds })
           }).then(function (res) { return res.json() })
             .then(function (json) {
               if (json.success) {
-                self.selectedIds = [];
-                self.loadUsers(); 
+                self.selectedIds = []; self.loadUsers(); 
+                self.$nextTick(function () {
+                  if (self.currentPage > self.totalPages) self.currentPage = self.totalPages
+                })
                 self.$message.success('删除成功') 
               }
             })
@@ -380,7 +379,7 @@ export default {
       this.popupMode = mode
       this.dialogVisible = true
       if (mode === 'add') {// 添加用户
-        this.popupData = { status: '未激活', department: '', role: '用户', name: '', year: '2024', email: '', phone: '', address: '绵阳市' }
+        this.popupData = { status: '未激活', role: '员工', address:'绵阳市' }
       } else {
         this.popupData = Object.assign({}, user)
       }
@@ -398,7 +397,7 @@ export default {
         return
       }
       if (self.popupMode === 'add') {// 新增用户
-        fetch('http://localhost:3001/api/users', {
+        fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(self.popupData)// 由JavaScript对象 转为 JSON字符串（因为HTTP 请求只能传输文本）
@@ -414,7 +413,7 @@ export default {
             }
           })
       } else {
-        fetch('http://localhost:3001/api/users/' + self.popupData.id, {// 编辑用户
+        fetch('/api/users/' + self.popupData.id, {// 编辑用户
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(self.popupData)
@@ -431,8 +430,9 @@ export default {
       var self = this
       self.$confirm('删除「' + user.name + '」？', '提示', { type: 'warning' })
         .then(function () {
-          fetch('http://localhost:3001/api/users/' + user.id, { method: 'DELETE' })
-            .then(function (res) { return res.json() })
+          fetch('/api/users/' + user.id, {
+             method: 'DELETE' 
+          }).then(function (res) { return res.json() })
             .then(function (json) {
               if (json.success) {
                 self.loadUsers();
@@ -447,7 +447,7 @@ export default {
 
 <style scoped>
 /* 页面整体 */
-.main-page { width: 1500px; zoom: 0.8; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
+.main-page { width: 1500px; margin: 30px auto; background: #16213e; border-radius: 12px; padding: 30px; }
 /* 顶部栏 */
 .top-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #2a2a4a; margin-bottom: 24px; }
 .top-bar h1 { color: #e2e2e2; font-size: 24px; margin: 0; }
@@ -484,6 +484,11 @@ export default {
 /* 弹窗 */
 .popup-label { color: #888; font-size: 14px; margin-bottom: 5px; }
 .popup-value { color: #e2e2e2; background: #0f3460; padding: 5px 15px; border-radius: 5px; }
+/* 两列网格 */
+.popup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+.popup-item { margin-bottom: 0; }
+/* 邮箱、地址独占一行 */
+.popup-full { grid-column: 1 / -1; }
 </style>
 
 <style>
